@@ -1,0 +1,170 @@
+/* Shared blog styling — Lazaro Kawer */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: #fbfbfb; }
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.62;
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 56px 24px 96px;
+}
+
+/* Site header (top of every page) */
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 64px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+.site-header a.brand {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a3a6c;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+.site-header nav a {
+  font-size: 14px;
+  color: #666;
+  text-decoration: none;
+  margin-left: 20px;
+}
+.site-header nav a:hover { color: #1a3a6c; }
+
+/* Article */
+article header {
+  margin-bottom: 40px;
+}
+article h1 {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  color: #000;
+  margin-bottom: 10px;
+}
+article .subtitle {
+  font-size: 19px;
+  color: #555;
+  font-style: italic;
+  margin-bottom: 16px;
+}
+article .meta {
+  font-size: 14px;
+  color: #888;
+}
+
+article h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a3a6c;
+  margin-top: 44px;
+  margin-bottom: 14px;
+  letter-spacing: -0.01em;
+}
+article h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #000;
+  margin-top: 28px;
+  margin-bottom: 10px;
+}
+
+article p {
+  margin-bottom: 18px;
+}
+article p strong { color: #000; }
+article ul, article ol {
+  margin: 0 0 18px 24px;
+}
+article li { margin-bottom: 8px; }
+
+article hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 36px 0;
+}
+
+article a {
+  color: #1a3a6c;
+  text-decoration: underline;
+  text-decoration-color: #c4cfe0;
+  text-underline-offset: 2px;
+}
+article a:hover { text-decoration-color: #1a3a6c; }
+
+article blockquote {
+  border-left: 3px solid #c4cfe0;
+  padding-left: 18px;
+  color: #555;
+  font-style: italic;
+  margin: 18px 0;
+}
+
+article code {
+  background: #f0f1f4;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.92em;
+  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+article .footnote {
+  font-size: 14px;
+  color: #777;
+  font-style: italic;
+}
+
+/* Blog index */
+.post-list { list-style: none; margin: 0; padding: 0; }
+.post-list li {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #eee;
+}
+.post-list li:last-child { border-bottom: none; }
+.post-list h2 {
+  font-size: 22px;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+.post-list h2 a {
+  color: #000;
+  text-decoration: none;
+}
+.post-list h2 a:hover { color: #1a3a6c; }
+.post-list .post-meta {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 8px;
+}
+.post-list .post-excerpt {
+  font-size: 16px;
+  color: #444;
+}
+
+/* Footer */
+.site-footer {
+  margin-top: 80px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .wrap { padding: 32px 18px 64px; }
+  article h1 { font-size: 28px; }
+  article h2 { font-size: 19px; }
+  body { font-size: 16px; }
+}

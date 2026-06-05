@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bi-Directional Class-of-Fix Taxonomies · Lazaro Kawer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How to let frontier models add to your code-fix corpus without ruining it. The design, the validation discipline that makes it work, and the trade-offs.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site-header">
+    <a href="../../" class="brand">Lazaro Kawer</a>
+    <nav>
+      <a href="../../">Home</a>
+      <a href="index.html">Notes</a>
+      <a href="../Resume.pdf" target="_blank">Résumé</a>
+    </nav>
+  </header>
+
+  <article>
+    <header>
+      <h1>Bi-Directional Class-of-Fix Taxonomies</h1>
+      <div class="subtitle">Or: how to let frontier models add to your code-fix corpus without ruining it.</div>
+      <div class="meta">June 2026 · Lazaro Kawer</div>
+    </header>
+
+    <p>When you build a system that uses a frontier model to propose code changes, bug fixes, performance optimizations, security patches, whatever, you eventually have to make a quiet decision about how much creative latitude the model gets. Most teams handle this implicitly by curating a corpus of known-good fix patterns and instructing the model to stay close to it. Hallucinated APIs go down. Spurious recommendations go down. The system feels safer.</p>
+
+    <p>But there is a second error that the same approach makes worse, and it is almost never measured: the model surfaces something real, the system cannot recognize it, and the proposal gets dropped. Over enough iterations, the corpus becomes the ceiling on what your system can find. Every novel pattern the model could discover is filtered out by the very grounding that was supposed to make the system trustworthy.</p>
+
+    <p>I built a different shape of this loop for a production AI code-optimization system, and the most useful thing about it is what it surfaced: optimization patterns the subject-matter experts on the team had not catalogued. Not because the experts were wrong. Because some patterns are easy to miss at human scale.</p>
+
+    <p>This post is about the design, the validation discipline that makes it work, and the trade-offs to think about if you copy the pattern.</p>
+
+    <h2>The two-error problem</h2>
+
+    <p>Frame the system as a binary classifier over candidate code changes. There are two failure modes.</p>
+
+    <p><strong>False positive.</strong> The model proposes a "fix" that looks like a known pattern but does not actually work, does not apply, or is subtly wrong. Most eval research focuses here. Calibrated judges, source-grounding scorers, replay infrastructure, all designed to catch the model agreeing with something that is not real.</p>
+
+    <p><strong>False negative.</strong> The model proposes something real that does not fit any pattern the system recognizes. The pipeline discards it, often without surfacing it for review at all.</p>
+
+    <p>The first error is the one teams build defenses against. The second is the one that quietly costs you most of the value the model could have provided.</p>
+
+    <p>A standard grounded pipeline (corpus of approved patterns, in-context retrieval, prompt template, judge with rubric) is implicitly optimized for false-positive elimination at the expense of false-negative containment. Whatever the model proposes that is not in the corpus either does not get prompted into the proposal at all, or gets filtered downstream as "not a recognized pattern."</p>
+
+    <p>This trade-off is not wrong. For many systems, leaning hard against false positives is the right call. But it is a trade-off the system designer should make consciously, and most architectures do not make it visible.</p>
+
+    <h2>The bi-directional loop</h2>
+
+    <p>The idea is small. Treat the corpus as a living artifact with two flows.</p>
+
+    <p>The pattern is not new in the abstract. Voyager (Wang et al., 2023) builds a similar skill library through self-proposal and environmental validation in Minecraft. Classical active learning has had this loop shape for thirty years: model proposes candidates, human or automated check validates, corpus grows. Fix-pattern mining in software engineering (PAR, TBar, FixMiner) extracts repair patterns from historical bug fixes and applies them to new code. What follows is not an abstract argument that this kind of loop should exist. It is one engineer's notes on what the gates actually have to do for the loop to produce something useful in a production code-optimization setting, and what came out of running it.</p>
+
+    <p><strong>Forward (corpus to model).</strong> The model uses the taxonomy as grounding. Categories, examples, anti-patterns. Reduces hallucination, anchors generation, makes outputs comparable across runs.</p>
+
+    <p><strong>Backward (model to corpus).</strong> Model-proposed patterns that do not fit any existing category are not silently dropped. They route through validation gates. Patterns that survive get admitted to the taxonomy.</p>
+
+    <p>Once that second flow exists, the taxonomy stops being a static specification and starts being a record of what the system has learned. A new model migration does not require rebuilding the corpus from scratch; you re-run the loop, see what new categories the better model surfaces, and validate them. Old categories that no longer get proposed start to age out.</p>
+
+    <p>The interesting design work is in the validation gates. If they are too strict, the corpus calcifies and the loop degenerates into a slightly more forgiving version of the static-corpus baseline. If they are too loose, the corpus drifts toward whatever the model happens to over-generate this week, and the system's behavior becomes a function of its own historical bias.</p>
+
+    <h2>What the validation gates actually have to do</h2>
+
+    <p>Five gates have been useful, in increasing order of cost.</p>
+
+    <p><strong>Reproducibility.</strong> The candidate pattern has to appear consistently across runs with the same input. If the model proposes it once and never again, it is not a pattern; it is a hallucination that happened to land near a real one.</p>
+
+    <p><strong>Cross-model agreement.</strong> Two or more frontier models from different families have to land in roughly the same neighborhood when given comparable inputs. This is doing a lot of work in two directions. If only one model proposes the pattern, you are at risk of encoding that model's bias as a "discovery." If multiple unrelated models converge on it, that is evidence the pattern is in the underlying engineering reality, not in the model's training-set quirks.</p>
+
+    <p><strong>Measurable empirical effect.</strong> When the pattern is applied to production-realistic code, the relevant metric has to move in the expected direction with a defensible magnitude. This is where most candidate patterns die, and that is healthy. Most of what a frontier model proposes is plausible-sounding noise.</p>
+
+    <p><strong>Internal coherence sanity check.</strong> A subject-matter expert reads the pattern and the proposed mechanism. The bar is not "I would have suggested this." The bar is "this is internally consistent and the mechanism story does not contradict known constraints." This is fast, low-burden human review (minutes, not days) and it catches the patterns that score well on every automated check but contain a subtle conceptual error a model would not notice.</p>
+
+    <p><strong>Source grounding.</strong> Can the pattern be traced to a real causal mechanism, or is it just a textual match for the appearance of fixes that worked in the past? Source-grounding scorers are the most labor-intensive layer to build and the most valuable when they work. A pattern that looks correct on every other gate but does not have a traceable mechanism is the most dangerous failure mode in the system, because it will be agreed with by judges, replicated by other models (which share training data), and pass empirical effect tests in any sample where the spurious correlation happens to hold.</p>
+
+    <p>A pattern that survives all five is admitted to the taxonomy as a new class. The classification gets a confidence level, an attribution (which model first proposed it, which validation runs it passed), and a body of supporting evidence.</p>
+
+    <p><strong>A note on cross-model agreement.</strong> Of the five gates, this is the only one that runs in both directions. For admission, it is evidence that a pattern lives in the engineering reality and not in one model's training quirks. For deprecation, the same signal flips: a pattern that was previously admitted but stops being proposed by newer or more diverse model families is a candidate for revocation. The mechanism that gets a pattern into the corpus also tells you when to take it out. Most discussions of LLM-corpus loops treat this gate as a one-way valve. Treating it as bidirectional is what gives the system its only real defense against the corpus calcifying around an older generation of models.</p>
+
+    <h2>The finding I did not expect</h2>
+
+    <p>Once the loop was running, what came back was not slight variations on patterns the team already knew about. It was a small but recurring stream of optimization classes that no one on the team had explicitly catalogued. After the fact, you could trace why: the patterns showed up in code where the relevant constraint was distributed across multiple components, or where the underlying primitive only became expensive at the scale the production system actually operated at. Either condition is hard for an individual expert to hold in their head and easy for a model to land on by reading enough adjacent code. The model was not smarter than the experts; it was looking at a much wider candidate space than any human could enumerate.</p>
+
+    <p>I want to make that observation more concrete and more falsifiable than the standard "the model found things we missed" claim. The bi-directional loop appears to surface such patterns when at least one of two conditions holds: the relevant constraint is distributed across components no single expert owns, or the primitive in question only becomes expensive at the scale the production system actually operates at. If neither condition holds in your codebase, my prior is that the loop will mostly reproduce patterns experts already catalogue, and the marginal value of running it is low. I would be curious whether other teams running similar loops see the same pattern hold.</p>
+
+    <p>This is the part of the result that matters for alignment. The standard mental model of frontier models in technical workflows is <em>assistant</em>: faster typist, better recall. The bi-directional loop suggests a different mental model: <em>search engine over a candidate space humans cannot fully enumerate</em>, gated by validation infrastructure humans can audit. The model is not a more reliable engineer; it is a wider-net source of candidates. The validation is what makes the wider net safe.</p>
+
+    <p>That is a much more honest framing of what these systems can do well today, and it lands differently than the "we built copilot for X" story. It also makes the design constraint clear: the system is only as good as its validation gates.</p>
+
+    <h2>What this is not</h2>
+
+    <p>It is worth saying what bi-directional taxonomies do not fix.</p>
+
+    <p>They do not replace human judgment. Every gate I described is either an automated proxy for human judgment or a structured way to make human judgment cheaper to apply at the right moments. The point is not to skip the expert; it is to spend the expert's attention on candidates that have already passed the cheap checks.</p>
+
+    <p>They do not make the model an oracle. A pattern admitted to the corpus is not "true." It is "supported by enough evidence to be worth grounding future proposals against." If the underlying mechanism turns out to be wrong, the pattern can be revoked. The taxonomy versioning matters.</p>
+
+    <p>They do not eliminate the corpus-drift problem. They make it visible. You can watch the rate at which new patterns are admitted, where they are concentrated, and whether the distribution looks like real engineering reality or like an artifact of the validation gates' blind spots. That visibility is the actual win.</p>
+
+    <p>They do not help if the metric you are optimizing for is wrong. Garbage in, smarter garbage out, more efficiently.</p>
+
+    <h2>The harder open questions</h2>
+
+    <p>Three questions came up while building this that I do not think have settled answers in the broader AI-engineering field yet.</p>
+
+    <p><strong>How conservative should the validation gates be?</strong> I argued for the five-gate stack above, but the calibration is project-specific. If your downstream cost of a false positive is catastrophic (say, security patches that have to go to production unreviewed), you want the gates near-impassable, and you should accept that the back-flow will be slow. If your downstream cost is recoverable (a suggested optimization a human reviews before merging), you can let more candidates through and rely on the human gate. There is no universal answer, but the trade-off should be made explicitly with the operator team, not left implicit in code-review thresholds.</p>
+
+    <p><strong>How do you avoid encoding model-specific bias in the corpus?</strong> Cross-model agreement helps. So does periodically running the loop in "audit mode," re-evaluating existing taxonomy entries with newer or different model families to see which still get proposed and which do not. Entries that stop getting proposed by a diverse set of models are candidates for revocation. This is the closest thing the system has to a way to forget.</p>
+
+    <p><strong>Where does attribution sit?</strong> When a model proposes a novel pattern, validation gates pass it, and a human reviewer signs off, who gets credit? In practical engineering terms this is bookkeeping. In organizational terms it is a real political problem. It is especially fraught when the proposed pattern improves on something an expert designed. The taxonomy stores the attribution chain (proposed by model X on date Y, validated by gates Z, reviewed by person A) and lets the team decide how to surface it. There is no right answer; there is just a record.</p>
+
+    <h2>Why this matters beyond code optimization</h2>
+
+    <p>The general structure (model-as-candidate-generator, gates-as-validation, corpus-as-versioned-record-of-what-survived) is portable. It applies anywhere you want a frontier model to expand the surface area of what your system considers without losing the ability to audit what got in.</p>
+
+    <p>Bug taxonomies. Test case generation. Threat models. Failure-mode catalogs. Code-review heuristics. The pattern works in any domain where the corpus is genuinely incomplete and the validation infrastructure can be made cheaper than the model's proposal rate.</p>
+
+    <p>What I have come away from this convinced of: most of the value of frontier models in engineering workflows is not in any single answer they produce. It is in how much faster they let you explore a candidate space that was previously bounded by what a small number of experts could enumerate. The taxonomy and the gates are what convert that exploration into something durable.</p>
+
+    <p>There is also a version of this concern that matters specifically for alignment. Once a model contributes back to the corpus that grounds its own next iteration, you have created a feedback loop in which the model's preferences shape the future model's grounding, which shapes the future model's preferences. Without validation gates, that loop is a quiet way for model-specific biases to harden into something the team treats as engineering reality. The gates are not a nice-to-have in that frame; they are the only mechanism by which the corpus stays anchored to the underlying world rather than drifting toward the model's interior. That is also why source grounding is the most important of the five: it is the only check that asks whether a pattern corresponds to something real, rather than whether the model would propose it again.</p>
+
+    <p>The story most current AI-augmented engineering systems are telling, that the model is good enough to ship, is doing all the wrong work. The interesting story is that the model is a useful search step in a pipeline whose validation discipline determines whether it produces compounding value or compounding error. Bi-directional taxonomies are one concrete way to build the second.</p>
+
+    <hr>
+
+    <p class="footnote">This is the design I built for a production AI code-optimization system; the specifics are confidential. If you are thinking about a similar loop for your own work, I would be curious how the validation calibration shakes out for your domain. Reach me at <a href="mailto:kawer7@gmail.com">kawer7@gmail.com</a> or on <a href="https://www.linkedin.com/in/lko/">LinkedIn</a>.</p>
+
+  </article>
+
+  <footer class="site-footer">
+    &copy; Lazaro Kawer
+  </footer>
+
+</div>
+</body>
+</html>
