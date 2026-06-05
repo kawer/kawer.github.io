@@ -169,7 +169,7 @@ article .footnote {
 }
 .post-card-cta {
   flex-shrink: 0;
-  align-self: center;
+  align-self: flex-start;
   font-size: 14px;
   font-weight: 600;
   color: #1a3a6c;
