@@ -19,6 +19,7 @@ Screenshots are generated for ten routes at desktop and mobile widths. Local rev
 - The former deployment uploaded the whole repository. Deployment now uses an explicit generated output and asset allowlist; draft sources never reach that directory.
 - The legacy essay contains material requiring disclosure review. Its route serves a safe review notice rather than republishing the source.
 - Social metadata now uses a PNG card for crawler compatibility.
+- The initial hosted CI run found a path assertion matching the repository name in its parent directory. Publication-boundary checks now inspect paths relative to the deployment directory.
 
 ## Performance and browser scope
 

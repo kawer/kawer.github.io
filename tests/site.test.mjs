@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir, stat, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { loadCollection, markdown } from '../scripts/content.mjs';
@@ -60,7 +60,7 @@ test('every internal href and resource resolves, including fragments', async () 
 
 test('unpublished content and repository internals cannot enter deployment', async () => {
   const output = await files(root);
-  assert.ok(!output.some(path => /(?:node_modules|\.git|private-review|\.md$)/.test(path)));
+  assert.ok(!output.some(path => /(?:node_modules|\.git|private-review|\.md$)/.test(relative(root, path))));
   for (const dir of ['work', 'writing']) {
     for (const entry of await readdir(`content/${dir}`)) {
       if (!entry.endsWith('.md')) continue;
