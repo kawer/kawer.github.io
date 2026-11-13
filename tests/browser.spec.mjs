@@ -45,11 +45,76 @@ test('homepage remains usable at narrow, tablet, and laptop widths', async ({ pa
   }
 });
 
-test('homepage loads without third-party requests or client JavaScript', async ({ page }) => {
+test('homepage enhancement loads locally and reading pages need no JavaScript', async ({ page }) => {
   const requests = [];
   page.on('request', request => requests.push(request.url()));
   await page.goto('/');
   await expect(page.locator('h1')).toBeVisible();
-  expect(await page.locator('script').count()).toBe(0);
+  const scripts = page.locator('script[src]');
+  await expect(scripts).toHaveCount(1);
+  expect(await scripts.first().getAttribute('src')).toMatch(/^\/assets\/.*\.js$/);
   expect(requests.every(url => url.startsWith('http://127.0.0.1:4173/'))).toBe(true);
+  for (const route of ['/work/', '/writing/', '/about/', '/resume/']) {
+    await page.goto(route);
+    await expect(page.locator('script')).toHaveCount(0);
+  }
+});
+
+
+test('geometric study has working motion, rotation, and reset controls', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const canvas = page.locator('#field-canvas');
+  await expect(canvas).toBeVisible();
+  const motion = page.locator('[data-field-action="motion"]');
+  await expect(motion).toBeVisible();
+  await expect(motion).toHaveAttribute('aria-pressed', 'false');
+  const pixels = () => canvas.evaluate(element => element.toDataURL());
+  const resting = await pixels();
+  await page.waitForTimeout(150);
+  expect(await pixels()).toBe(resting);
+  await page.locator('[data-field-action="left"]').click();
+  await expect.poll(pixels).not.toBe(resting);
+  await page.locator('[data-field-action="reset"]').click();
+  await expect.poll(pixels).toBe(resting);
+  await motion.click();
+  await expect(motion).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(pixels).not.toBe(resting);
+  await motion.click();
+  await expect(motion).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('geometry can be rotated by pointer and keyboard controls', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const canvas = page.locator('#field-canvas');
+  await expect(canvas).toBeVisible();
+  const pixels = () => canvas.evaluate(element => element.toDataURL());
+  const initial = await pixels();
+  const bounds = await canvas.boundingBox();
+  expect(bounds).toBeTruthy();
+  await page.mouse.move(bounds.x + bounds.width * .55, bounds.y + bounds.height * .5);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * .7, bounds.y + bounds.height * .6, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(pixels).not.toBe(initial);
+  const rotated = await pixels();
+  const right = page.locator('[data-field-action="right"]');
+  await right.focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(pixels).not.toBe(rotated);
+});
+
+test.describe('without JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+  test('static geometric artwork and content remain available', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.field-fallback')).toBeVisible();
+    await expect(page.locator('#field-canvas')).toBeHidden();
+    await expect(page.locator('.field-controls')).toBeHidden();
+    await expect(page.locator('h1')).toBeVisible();
+    await page.locator('.site-nav').getByRole('link', { name: 'Work', exact: true }).click();
+    await expect(page).toHaveURL(/\/work\/$/);
+    await expect(page.locator('h1')).toBeVisible();
+  });
 });

@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { renderFieldSvg } from './field-svg.mjs';
 import { loadCollection, markdown } from './content.mjs';
 import { renderPage, renderHome, renderAbout, renderResume, renderListing, renderArticle, render404 } from './templates.mjs';
 
@@ -43,7 +44,7 @@ for (const path of ['/docs/blog/', '/docs/blog/index.html', '/docs/blog/bi-direc
 }
 
 // This allowlist is the deployment boundary. Never copy the repository or content tree.
-for (const asset of ['CNAME', 'assets/css/site.css', 'assets/favicon.svg', 'assets/social.svg', 'assets/social.png', 'docs/Lazaro_Kawer_Resume.pdf']) {
+for (const asset of ['CNAME', 'assets/css/site.css', 'assets/js/field.js', 'assets/js/geometry.mjs', 'assets/fonts/IBMPlexSans-Regular.woff2', 'assets/fonts/IBMPlexSans-Medium.woff2', 'assets/fonts/IBM-Plex-LICENSE.txt', 'assets/favicon.svg', 'assets/social.svg', 'assets/social.png', 'docs/Lazaro_Kawer_Resume.pdf']) {
   const destination = join(output, asset);
   await mkdir(dirname(destination), { recursive: true });
   await cp(join(root, asset), destination);
@@ -53,6 +54,7 @@ await cp(join(root, 'docs/Lazaro_Kawer_Resume.pdf'), join(output, 'docs/Resume.p
 // Math fonts and styles are served locally; no third-party runtime requests.
 await cp(join(root, 'node_modules/katex/dist/katex.min.css'), join(output, 'assets/css/katex.min.css'));
 await cp(join(root, 'node_modules/katex/dist/fonts'), join(output, 'assets/css/fonts'), { recursive: true });
+await writeFile(join(output, 'assets/field.svg'), renderFieldSvg());
 await writeFile(join(output, '.nojekyll'), '');
 await writeFile(join(output, 'robots.txt'), 'User-agent: *\nAllow: /\nSitemap: https://kawer.dev/sitemap.xml\n');
 await writeFile(join(output, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${routes.map(path => `  <url><loc>https://kawer.dev${path}</loc></url>`).join('\n')}\n</urlset>\n`);

@@ -10,5 +10,6 @@ export default [
       globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', URL: 'readonly' }
     },
     rules: { 'no-unused-vars': ['error', { argsIgnorePattern: '^_' }] }
-  }
+  },
+  { files: ['assets/js/**/*.{js,mjs}'], languageOptions: { globals: { document: 'readonly', matchMedia: 'readonly', devicePixelRatio: 'readonly', requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly', IntersectionObserver: 'readonly', ResizeObserver: 'readonly' } } }
 ];

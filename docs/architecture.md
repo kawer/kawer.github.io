@@ -8,9 +8,9 @@ The public landing page and current résumé were reviewed directly. The résum�
 
 ## Keep static hosting
 
-Retain GitHub Pages and the existing custom domain. A small Node build generates ordinary HTML; there is no client framework, hydration, server, or database. This keeps the existing deployment model while avoiding hand-maintained shared navigation across multiple pages. Node is a build dependency only.
+Retain GitHub Pages and the existing custom domain. A small Node build generates ordinary HTML; there is no client framework, hydration, server, or database. A small native JavaScript module progressively enhances the homepage’s geometric artwork; reading pages do not load it. This keeps the existing deployment model while avoiding hand-maintained shared navigation across multiple pages. Node is a build dependency only.
 
-The implementation uses `markdown-it` for Markdown, `front-matter` for metadata, and KaTeX for optional mathematical notation. Raw HTML in Markdown is disabled, KaTeX trust is disabled, and there are no remote runtime scripts. All navigation uses real links. Layout and navigation require no JavaScript. Browser screenshots and reports stay outside the deployment artifact.
+The implementation uses `markdown-it` for Markdown, `front-matter` for metadata, and KaTeX for optional mathematical notation. Raw HTML in Markdown is disabled, KaTeX trust is disabled, and there are no remote runtime scripts. All navigation uses real links. Layout, navigation, and content require no JavaScript. The homepage enhancement uses Canvas 2D without third-party rendering libraries. Geometry is shared between a generated SVG fallback and the browser renderer. It contains no data or claims about employer systems. Pointer rotation has button equivalents, and reduced-motion, pause, page visibility, and offscreen rendering are handled explicitly. Browser screenshots and reports stay outside the deployment artifact.
 
 ## Publication boundary
 
@@ -24,7 +24,7 @@ The pre-existing blog article discusses production implementation and explicitly
 
 The primary routes are `/`, `/work/`, `/writing/`, `/about/`, and `/resume/`. Published Markdown uses `/work/<slug>/` or `/writing/<slug>/`. `404.html` is an actual error document, and old blog routes provide a review notice linking to Writing. The current PDF remains at `/docs/Lazaro_Kawer_Resume.pdf`; `/docs/Resume.pdf` serves the same unchanged current PDF to preserve the old résumé link.
 
-Templates supply canonical URLs, descriptions, social metadata, semantic navigation, and shared page chrome. The build creates a sitemap containing only published canonical pages and robots.txt with the sitemap address. Local SVG icons avoid remote requests; a local PNG provides crawler-compatible social previews. KaTeX assets are copied locally for future articles; CSS need only be linked by article templates when math is present.
+Templates supply canonical URLs, descriptions, social metadata, semantic navigation, and shared page chrome. The build creates a sitemap containing only published canonical pages and robots.txt with the sitemap address. Local SVG icons and self-hosted IBM Plex Sans avoid third-party font or image requests; a local PNG provides crawler-compatible social previews. The font’s open license is included with the deployed assets. KaTeX assets are copied locally for future articles; CSS need only be linked by article templates when math is present.
 
 ## Validation and release
 
@@ -35,3 +35,7 @@ The production workflow retains master-triggered GitHub Pages compatibility and 
 ## Remaining human decisions
 
 Confirm current title/dates against the résumé before publishing changes later. Obtain explicit employer disclosure permission for any case-study implementation details and results. Confirm individual contribution separately from team outcomes. Review the existing article before republication. These decisions are content publication gates, not blockers for reviewing this static-site implementation.
+
+## Visual revision
+
+The earlier cream/serif/numbered portfolio design was rejected as formulaic. The approved reference is BlueYard’s exploratory approach. The revision uses a cool pale ground, petrol text, cobalt geometric artwork, locally hosted sans typography, compact navigation, and quieter reading layouts. It uses no BlueYard code, images, logos, or proprietary assets. The single geometric centerpiece is generated from mathematical coordinates and labeled as a geometry study. No new professional claims or employer details were added.

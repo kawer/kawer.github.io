@@ -1,6 +1,6 @@
 # kawer.dev
 
-A static personal website for Lazaro Kawer. HTML is generated at build time from shared templates, verified biography data, and Markdown. The deployed site needs no JavaScript, application server, analytics, or external font services.
+A static personal website for Lazaro Kawer. HTML is generated at build time from shared templates, verified biography data, and Markdown. The site uses plain HTML and CSS, with one small progressive enhancement for the homepage geometry study. It needs no application server, analytics, or external font services. Navigation and all content work without JavaScript.
 
 ## Develop and review
 
@@ -28,12 +28,19 @@ The browser tests start their own preview server. Screenshots and test reports a
 - `content/writing/*.md`: technical writing.
 - `scripts/templates.mjs`: reusable HTML templates and page layouts.
 - `assets/css/site.css`: responsive design tokens and components.
+- `assets/js/field.js` and `geometry.mjs`: original interactive geometry, loaded only on the homepage.
+- `scripts/field-svg.mjs`: builds the static SVG fallback from the same geometry.
+- `assets/fonts/`: locally hosted IBM Plex Sans and its open font license.
 
 Markdown frontmatter requires `title`, `description`, `date` (`YYYY-MM-DD`), and `status` (`published` or `draft`). Optional metadata includes `tags` and `source`. Only `published` entries generate routes, listings, or sitemap entries. Raw HTML in Markdown is disabled. Code fences and KaTeX notation (`$...$`, `$$...$$`) render during the build, with local styles/fonts available in `dist/assets/css`.
 
 Changing `status` is a publication decision. Verify all claims and disclosure permissions first. Drafts contain review prompts, never confidential implementation details. Keep sensitive notes outside this public repository; `.private/` is ignored.
 
 The existing résumé PDF is preserved byte-for-byte. Legacy résumé and blog URLs remain navigable. The old blog article is withheld from the built artifact while disclosure is reviewed.
+
+## Visual direction
+
+The personal laboratory direction takes inspiration from BlueYard’s exploratory character, while using original geometry and an independent palette and layout. The homepage’s harmonic sphere is a mathematical study, not project telemetry or an employer architecture. Pointer rotation has keyboard-accessible button equivalents. Motion can be paused, starts still for reduced-motion preferences, and stops when offscreen or in a background tab. The static SVG remains available when JavaScript or canvas is unavailable.
 
 ## Deployment
 
