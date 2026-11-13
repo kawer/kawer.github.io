@@ -1,0 +1,33 @@
+{
+  "name": "Lazaro Kawer",
+  "role": "AI / ML engineer",
+  "intro": "I build evaluation systems, applied machine learning, and the software that puts them to work.",
+  "biography": [
+    "I'm a Senior Research Engineer and AI Evaluation Lead in Windows Fundamentals at Microsoft. My work spans production AI evaluation, predictive machine learning, and statistical systems for engineering decisions.",
+    "Before Microsoft, I worked on recommender and data systems as an AI/ML engineering intern on Apple's Siri Search team, and on infrastructure for Google Search and Cloud as a software engineering intern.",
+    "I studied computer science at ITESM Monterrey. My technical interests include model evaluation, agent reliability, forecasting, and the relationship between a system's measured behavior and its behavior in use."
+  ],
+  "interests": ["Model evaluation", "Agent reliability", "Applied statistics", "On-device ML"],
+  "expertise": [
+    {"title": "Evaluation as engineering", "description": "AI evaluation and agent workflows in Windows Fundamentals at Microsoft."},
+    {"title": "ML under real constraints", "description": "Predictive machine learning for Windows, with earlier recommender and data work on Siri Search."},
+    {"title": "Systems for decisions", "description": "Forecasting, regression attribution, and software for performance decisions."}
+  ],
+  "experience": [
+    {"company": "Microsoft", "team": "Windows Fundamentals", "role": "Senior Research Engineer · AI Evaluation Lead", "period": "2021–present", "summary": "Joined as a software engineer in 2021; Senior Software Engineer from 2024 and Senior Research Engineer / AI Evaluation Lead from 2025. Work spans AI evaluation, predictive ML, and statistical decision systems."},
+    {"company": "Apple", "team": "Siri Search", "role": "AI/ML Engineer Intern", "period": "Summer 2019", "summary": "Built recommender and data systems for Siri Knowledge Cards and evaluated outcomes through production A/B tests."},
+    {"company": "Google", "team": "Search and Cloud", "role": "Software Engineering Intern", "period": "Summers 2017, 2018", "summary": "Built feedback infrastructure and quality dashboards for Search, and a load generator and scheduler for Cloud."}
+  ],
+  "education": {"institution": "ITESM Monterrey", "degree": "B.S.E. Computer Science", "date": "June 2020"},
+  "profiles": {"github": "https://github.com/kawer", "linkedin": "https://www.linkedin.com/in/lko/", "email": "mailto:kawer7@gmail.com", "resume": "/docs/Lazaro_Kawer_Resume.pdf"},
+  "sources": [
+    {"label": "Public résumé", "url": "https://kawer.dev/docs/Lazaro_Kawer_Resume.pdf"},
+    {"label": "Existing website", "url": "https://kawer.dev"},
+    {"label": "GitHub", "url": "https://github.com/kawer"}
+  ],
+  "selectedWork": [
+    {"slug": "production-ai-evaluation", "title": "Production AI evaluation & agent reliability", "description": "Evaluation work in Windows Fundamentals. A brief overview of the public record."},
+    {"slug": "on-device-predictive-ml", "title": "On-device predictive machine learning", "description": "Predictive ML for Windows. Scope and deployment boundaries from the public résumé."},
+    {"slug": "statistical-decision-systems", "title": "Statistical & decision systems", "description": "Forecasting, regression attribution, and performance decisions at fleet scale."}
+  ]
+}
