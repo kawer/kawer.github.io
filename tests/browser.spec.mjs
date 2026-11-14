@@ -92,6 +92,7 @@ test('geometry can be rotated by pointer and keyboard controls', async ({ page }
   const canvas = page.locator('#field-canvas');
   await expect(canvas).toBeVisible();
   const pixels = () => canvas.evaluate(element => element.toDataURL());
+  await canvas.scrollIntoViewIfNeeded();
   const initial = await pixels();
   const bounds = await canvas.boundingBox();
   expect(bounds).toBeTruthy();
@@ -160,3 +161,111 @@ for (const route of ['/', '/work/']) {
     }
   });
 }
+
+
+test('native shape selector works by keyboard and produces distinct reduced-motion artwork', async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const selector = page.getByRole('combobox', { name: 'Shape', exact: true });
+  const canvas = page.locator('#field-canvas');
+  const motion = page.locator('[data-field-action="motion"]');
+  await expect(selector).toBeVisible();
+  await expect(selector).toHaveValue('sphere');
+  await expect(selector.locator('option')).toHaveText(['Rippled sphere', 'Torus', 'Trefoil knot']);
+  const pixels = () => canvas.evaluate(element => element.toDataURL());
+  const originalSphere = await pixels();
+  await canvas.focus();
+  await page.keyboard.press('ArrowRight');
+  const rotatedSphere = await pixels();
+  await selector.selectOption('torus');
+  await selector.selectOption('sphere');
+  expect(await pixels()).toBe(rotatedSphere);
+  await canvas.focus();
+  await page.keyboard.press('Home');
+  expect(await pixels()).toBe(originalSphere);
+  await selector.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(selector).toHaveValue('torus');
+  const results = [];
+  const directory = process.env.SCREENSHOT_DIR || 'artifacts';
+  await mkdir(directory, { recursive: true });
+  for (const shape of ['sphere', 'torus', 'trefoil']) {
+    await selector.selectOption(shape);
+    const image = await pixels();
+    expect(results).not.toContain(image);
+    results.push(image);
+    await expect(motion).toHaveAttribute('aria-pressed', 'false');
+    await page.waitForTimeout(180);
+    expect(await pixels()).toBe(image);
+    await canvas.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(pixels).not.toBe(image);
+    await page.keyboard.press('Home');
+    await expect.poll(pixels).toBe(image);
+    await expect(selector).toHaveValue(shape);
+    await page.keyboard.press('ArrowUp');
+    await page.locator('[data-field-action="reset"]').click();
+    await expect.poll(pixels).toBe(image);
+    await expect(selector).toHaveValue(shape);
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+    expect(scan.violations).toEqual([]);
+    await page.locator('.field-controls').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(directory, `${testInfo.project.name}-shape-${shape}.png`) });
+  }
+});
+
+test('shape morphing preserves paused state, running state, and the last interrupted selection', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/');
+  const selector = page.getByRole('combobox', { name: 'Shape', exact: true });
+  const canvas = page.locator('#field-canvas');
+  const motion = page.locator('[data-field-action="motion"]');
+  await expect(motion).toHaveAttribute('aria-pressed', 'true');
+  await motion.click();
+  await expect(motion).toHaveAttribute('aria-pressed', 'false');
+  const pixels = () => canvas.evaluate(element => element.toDataURL());
+  await selector.selectOption('torus');
+  await page.waitForTimeout(100);
+  await selector.selectOption('trefoil');
+  await page.waitForTimeout(850);
+  await expect(selector).toHaveValue('trefoil');
+  await expect(motion).toHaveAttribute('aria-pressed', 'false');
+  const completed = await pixels();
+  await page.waitForTimeout(160);
+  expect(await pixels()).toBe(completed);
+  await selector.selectOption('torus');
+  await page.waitForTimeout(100);
+  await canvas.click();
+  const tapped = await pixels();
+  await page.waitForTimeout(700);
+  expect(await pixels()).toBe(tapped);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await selector.selectOption('sphere');
+  await selector.selectOption('torus');
+  expect(await pixels()).toBe(tapped);
+  await selector.selectOption('sphere');
+  await selector.selectOption('trefoil');
+  expect(await pixels()).toBe(completed);
+  await motion.click();
+  await selector.selectOption('torus');
+  await expect(motion).toHaveAttribute('aria-pressed', 'true');
+  const rotating = await pixels();
+  await expect.poll(pixels).not.toBe(rotating);
+  await expect(selector).toHaveValue('torus');
+});
+
+test('shape controls remain reachable without overflow at phone and tablet widths', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const width of [320, 390, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    const selector = page.getByRole('combobox', { name: 'Shape', exact: true });
+    await selector.selectOption('trefoil');
+    await expect(selector).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const controls = await page.locator('.field-controls').boundingBox();
+    expect(controls.x).toBeGreaterThanOrEqual(0);
+    expect(controls.x + controls.width).toBeLessThanOrEqual(width);
+  }
+});

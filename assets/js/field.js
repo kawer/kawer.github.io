@@ -5,7 +5,9 @@ const stage = /** @type {HTMLElement | null} */ (document.querySelector('.field-
 const controls = /** @type {HTMLElement | null} */ (document.querySelector('.field-controls'));
 const context = canvas?.getContext('2d');
 if (canvas && stage && controls && context) {
-  const surface = createSurface();
+  let surface = createSurface();
+  /** @type {null | {from: typeof surface, to: typeof surface, started: number}} */
+  let transition = null;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let yaw = INITIAL_YAW, pitch = INITIAL_PITCH;
   let running = !reducedMotion.matches;
@@ -15,6 +17,9 @@ if (canvas && stage && controls && context) {
   let size = 0;
   const motion = /** @type {HTMLButtonElement} */ (controls.querySelector('[data-field-action="motion"]'));
   const note = /** @type {HTMLElement} */ (stage.querySelector('.field-note'));
+  const shape = /** @type {HTMLSelectElement} */ (controls.querySelector('#field-shape'));
+  const title = /** @type {HTMLElement} */ (stage.querySelector('.field-title'));
+  const shapeNames = {sphere: 'Rippled sphere', torus: 'Torus', trefoil: 'Trefoil knot'};
 
   function draw() {
     const ratio = Math.min(devicePixelRatio || 1, 2);
@@ -43,35 +48,56 @@ if (canvas && stage && controls && context) {
   }
   function tick(time) {
     frame = 0;
-    if (!running || !inView || document.hidden || dragging) return;
+    if ((!running && !transition) || !inView || document.hidden || dragging) return;
     if (time - lastTime >= 32) {
-      yaw += Math.min(time-lastTime, 50) * 0.000065;
+      if (running) yaw += Math.min(time-lastTime, 50) * 0.000065;
+      if (transition) {
+        const progress = Math.max(0, Math.min(1, (time - transition.started) / 600));
+        const blend = progress * progress * (3 - 2 * progress);
+        surface = transition.from.map((point, index) => {
+          const target = transition.to[index];
+          return {x: point.x + (target.x-point.x)*blend, y: point.y + (target.y-point.y)*blend, z: point.z + (target.z-point.z)*blend};
+        });
+        if (progress === 1) { surface = transition.to; transition = null; }
+      }
       lastTime = time;
       draw();
     }
-    frame = requestAnimationFrame(tick);
+    if (running || transition) frame = requestAnimationFrame(tick);
   }
   function syncMotion() {
     cancelAnimationFrame(frame);
     frame = 0;
     motion.setAttribute('aria-pressed', String(running));
     motion.textContent = running ? 'Pause motion' : 'Start motion';
-    if (running && inView && !document.hidden && !dragging) frame = requestAnimationFrame(tick);
+    if ((running || transition) && inView && !document.hidden && !dragging) frame = requestAnimationFrame(tick);
   }
   function pause() { running = false; syncMotion(); }
+  function finishTransition() {
+    if (transition) { surface = transition.to; transition = null; }
+  }
+  shape.addEventListener('change', () => {
+    const selected = /** @type {'sphere'|'torus'|'trefoil'} */ (shape.value);
+    const next = createSurface(selected);
+    title.textContent = shapeNames[selected];
+    canvas.setAttribute('aria-label', `${shapeNames[selected]} point cloud. Use arrow keys to rotate, or Home to reset.`);
+    if (reducedMotion.matches) { surface = next; transition = null; draw(); }
+    else transition = {from: surface, to: next, started: performance.now()};
+    syncMotion();
+  });
   controls.addEventListener('click', event => {
     const target = /** @type {Element} */ (event.target);
     const action = /** @type {HTMLElement | null} */ (target.closest('[data-field-action]'))?.dataset.fieldAction;
     if (!action) return;
     if (action === 'motion') { running = !running; syncMotion(); return; }
-    pause();
+    pause(); finishTransition();
     if (action === 'reset') { yaw = INITIAL_YAW; pitch = INITIAL_PITCH; }
     draw();
   });
   canvas.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
     event.preventDefault();
-    pause();
+    pause(); finishTransition();
     if (event.key === 'ArrowLeft') yaw -= 0.3;
     if (event.key === 'ArrowRight') yaw += 0.3;
     if (event.key === 'ArrowUp') pitch = Math.max(-1.3, pitch - 0.15);
@@ -81,7 +107,7 @@ if (canvas && stage && controls && context) {
   });
   canvas.addEventListener('pointerdown', event => {
     if (event.button !== 0) return;
-    pause(); dragging = true; lastX = event.clientX; lastY = event.clientY;
+    pause(); finishTransition(); draw(); dragging = true; lastX = event.clientX; lastY = event.clientY;
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener('pointermove', event => {
@@ -95,7 +121,7 @@ if (canvas && stage && controls && context) {
   canvas.addEventListener('pointerup',stopDrag);
   canvas.addEventListener('pointercancel',stopDrag);
   canvas.addEventListener('lostpointercapture',stopDrag);
-  reducedMotion.addEventListener('change',()=>{ if(reducedMotion.matches) pause(); });
+  reducedMotion.addEventListener('change',()=>{ if(reducedMotion.matches) { finishTransition(); pause(); draw(); } });
   document.addEventListener('visibilitychange',syncMotion);
   new IntersectionObserver(entries=>{inView = entries[0].isIntersecting;syncMotion();},{threshold:0.05}).observe(stage);
   new ResizeObserver(draw).observe(canvas);
