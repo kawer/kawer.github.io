@@ -55,6 +55,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
 .field-art canvas, .field-fallback { position: absolute; display: block; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .field-art canvas { touch-action: pan-y; cursor: grab; }
 .field-art canvas:active { cursor: grabbing; }
+.field-art canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -6px; }
 .field-art canvas[hidden] { display: none; }
 .field-fallback { pointer-events: none; }
 .field-stage[data-field-ready="true"] .field-fallback { display: none; }
@@ -87,16 +88,14 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
 .section-title { font-size: clamp(1.8rem, 2.6vw, 2.5rem); line-height: 1.12; letter-spacing: -.055em; margin: 0; }
 .section-note { max-width: 29rem; font-size: .85rem; color: var(--muted); margin: 0; }
 .work-list { list-style: none; padding: 0; margin: 0; }
-.work-item { display: grid; grid-template-columns: 180px minmax(0, 1fr) 32px; column-gap: 2rem; padding-block: 2rem; border-top: 1px solid var(--line); position: relative; }
+.work-item { text-decoration: none; display: grid; grid-template-columns: 180px minmax(0, 1fr) 32px; column-gap: 2rem; padding-block: 2rem; border-top: 1px solid var(--line); position: relative; }
 .work-item:last-child { border-bottom: 1px solid var(--line); }
 .work-topic { color: var(--muted); font-size: .78rem; margin: .3rem 0 0; }
 .work-number { display: none; }
 .work-content { min-width: 0; }
 .work-title { font-size: clamp(1.4rem, 2.1vw, 2rem); letter-spacing: -.04em; line-height: 1.2; margin-bottom: .65rem; }
-.work-title a { text-decoration: none; }
-.work-title a::after { content: ""; position: absolute; inset: 0; }
-.work-title a:focus-visible { outline: 0; }
-.work-item:focus-within { outline: 2px solid var(--accent); outline-offset: 6px; }
+.work-item:hover .work-title { color: var(--accent); text-decoration: underline; text-underline-offset: .2em; }
+.work-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
 .work-description { color: var(--muted); max-width: 53rem; font-size: .88rem; margin-bottom: 0; }
 .work-meta { display: flex; flex-wrap: wrap; gap: .6rem; font-size: .75rem; color: var(--muted); margin-bottom: .6rem; }
 .tag { font-size: .73rem; color: var(--muted); }

@@ -61,7 +61,7 @@ test('homepage enhancement loads locally and reading pages need no JavaScript', 
 });
 
 
-test('geometric study has working motion, rotation, and reset controls', async ({ page }) => {
+test('point cloud supports reduced motion, keyboard rotation, and reset', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   const canvas = page.locator('#field-canvas');
@@ -73,7 +73,9 @@ test('geometric study has working motion, rotation, and reset controls', async (
   const resting = await pixels();
   await page.waitForTimeout(150);
   expect(await pixels()).toBe(resting);
-  await page.locator('[data-field-action="left"]').click();
+  await expect(page.locator('[data-field-action="left"], [data-field-action="right"]')).toHaveCount(0);
+  await canvas.focus();
+  await page.keyboard.press('ArrowLeft');
   await expect.poll(pixels).not.toBe(resting);
   await page.locator('[data-field-action="reset"]').click();
   await expect.poll(pixels).toBe(resting);
@@ -99,10 +101,13 @@ test('geometry can be rotated by pointer and keyboard controls', async ({ page }
   await page.mouse.up();
   await expect.poll(pixels).not.toBe(initial);
   const rotated = await pixels();
-  const right = page.locator('[data-field-action="right"]');
-  await right.focus();
-  await page.keyboard.press('Enter');
+  await canvas.focus();
+  await expect(canvas).toHaveAttribute('role', 'img');
+  await expect(canvas).toHaveAttribute('tabindex', '0');
+  await page.keyboard.press('ArrowRight');
   await expect.poll(pixels).not.toBe(rotated);
+  await page.keyboard.press('Home');
+  await expect.poll(pixels).toBe(initial);
 });
 
 test.describe('without JavaScript', () => {
@@ -118,3 +123,40 @@ test.describe('without JavaScript', () => {
     await expect(page.locator('h1')).toBeVisible();
   });
 });
+
+
+for (const route of ['/', '/work/']) {
+  test(`${route} work rows navigate from their arrows, descriptions, and keyboard`, async ({ page }, testInfo) => {
+    await page.goto(route);
+    const rows = page.locator('a.work-item');
+    await expect(rows).toHaveCount(3);
+    const destinations = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('href')));
+    for (let index = 0; index < destinations.length; index++) {
+      const destination = destinations[index];
+      expect(destination).toMatch(/^\/work\/[a-z-]+\/$/);
+      for (const target of ['arrow', 'description', 'keyboard']) {
+        await page.goto(route);
+        const row = page.locator('a.work-item').nth(index);
+        await expect(row.locator('a')).toHaveCount(0);
+        const title = await row.locator('.work-title').innerText();
+        await expect(row).toHaveAccessibleName(title);
+        if (target === 'keyboard') {
+          await row.focus();
+          await expect(row).toBeFocused();
+          await page.keyboard.press('Enter');
+        } else {
+          const part = row.locator(target === 'arrow' ? '.arrow' : '.work-description');
+          await part.scrollIntoViewIfNeeded();
+          const bounds = await part.boundingBox();
+          expect(bounds).toBeTruthy();
+          const x = bounds.x + bounds.width / 2;
+          const y = bounds.y + bounds.height / 2;
+          if (testInfo.project.name === 'mobile') await page.touchscreen.tap(x, y);
+          else await page.mouse.click(x, y);
+        }
+        await expect(page).toHaveURL(`http://127.0.0.1:4173${destination}`);
+        await expect(page.locator('h1')).toHaveText(title);
+      }
+    }
+  });
+}

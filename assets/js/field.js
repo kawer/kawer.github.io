@@ -65,9 +65,18 @@ if (canvas && stage && controls && context) {
     if (!action) return;
     if (action === 'motion') { running = !running; syncMotion(); return; }
     pause();
-    if (action === 'left') yaw -= 0.3;
-    if (action === 'right') yaw += 0.3;
     if (action === 'reset') { yaw = INITIAL_YAW; pitch = INITIAL_PITCH; }
+    draw();
+  });
+  canvas.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
+    event.preventDefault();
+    pause();
+    if (event.key === 'ArrowLeft') yaw -= 0.3;
+    if (event.key === 'ArrowRight') yaw += 0.3;
+    if (event.key === 'ArrowUp') pitch = Math.max(-1.3, pitch - 0.15);
+    if (event.key === 'ArrowDown') pitch = Math.min(1.3, pitch + 0.15);
+    if (event.key === 'Home') { yaw = INITIAL_YAW; pitch = INITIAL_PITCH; }
     draw();
   });
   canvas.addEventListener('pointerdown', event => {
@@ -96,7 +105,7 @@ if (canvas && stage && controls && context) {
     draw();
     stage.dataset.fieldReady = 'true';
     controls.hidden = false;
-    note.textContent = 'Drag to rotate, or use the controls.';
+    note.textContent = 'Drag or use arrow keys to rotate.';
     syncMotion();
   } catch {
     canvas.hidden = true;

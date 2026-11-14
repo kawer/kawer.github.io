@@ -1,6 +1,6 @@
 # kawer.dev
 
-A static personal website for Lazaro Kawer. HTML is generated at build time from shared templates, verified biography data, and Markdown. The site uses plain HTML and CSS, with one small progressive enhancement for the homepage geometry study. It needs no application server, analytics, or external font services. Navigation and all content work without JavaScript.
+A static personal website for Lazaro Kawer. HTML is generated at build time from shared templates, verified biography data, and Markdown. The site uses plain HTML and CSS, with one small progressive enhancement for the homepage point cloud. It needs no application server, analytics, or external font services. Navigation and all content work without JavaScript.
 
 ## Develop and review
 
@@ -40,7 +40,7 @@ The existing résumé PDF is preserved byte-for-byte. Legacy résumé and blog U
 
 ## Visual direction
 
-The personal laboratory direction takes inspiration from BlueYard’s exploratory character, while using original geometry and an independent palette and layout. The homepage’s harmonic sphere is a mathematical study, not project telemetry or an employer architecture. Pointer rotation has keyboard-accessible button equivalents. Motion can be paused, starts still for reduced-motion preferences, and stops when offscreen or in a background tab. The static SVG remains available when JavaScript or canvas is unavailable.
+The personal laboratory direction takes inspiration from BlueYard’s exploratory character, while using original geometry and an independent palette and layout. The homepage’s harmonic sphere is abstract mathematical artwork. The illustration expresses an exploratory visual identity and makes no claim about professional accomplishments or employer systems. Drag rotates the point cloud; focusing it and using arrow keys provides the keyboard equivalent. Home or Reset restores the initial orientation. Work rows are native links: their title, description, whitespace, and arrow share one destination. Motion can be paused, starts still for reduced-motion preferences, and stops when offscreen or in a background tab. The static SVG remains available when JavaScript or canvas is unavailable.
 
 ## Deployment
 
