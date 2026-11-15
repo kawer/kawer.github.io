@@ -77,7 +77,8 @@ test('point cloud supports reduced motion, keyboard rotation, and reset', async 
   await canvas.focus();
   await page.keyboard.press('ArrowLeft');
   await expect.poll(pixels).not.toBe(resting);
-  await page.locator('[data-field-action="reset"]').click();
+  await canvas.focus();
+  await page.keyboard.press('Home');
   await expect.poll(pixels).toBe(resting);
   await motion.click();
   await expect(motion).toHaveAttribute('aria-pressed', 'true');
@@ -101,9 +102,10 @@ test('geometry can be rotated by pointer and keyboard controls', async ({ page }
   await page.mouse.move(bounds.x + bounds.width * .7, bounds.y + bounds.height * .6, { steps: 5 });
   await page.mouse.up();
   await expect.poll(pixels).not.toBe(initial);
+  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
   const rotated = await pixels();
   await canvas.focus();
-  await expect(canvas).toHaveAttribute('role', 'img');
+  await expect(canvas).toHaveAttribute('role', 'button');
   await expect(canvas).toHaveAttribute('tabindex', '0');
   await page.keyboard.press('ArrowRight');
   await expect.poll(pixels).not.toBe(rotated);
@@ -163,109 +165,155 @@ for (const route of ['/', '/work/']) {
 }
 
 
-test('native shape selector works by keyboard and produces distinct reduced-motion artwork', async ({ page }, testInfo) => {
+test('Kawer can be revealed by its button, keyboard, pointer, and assistive click', async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  const selector = page.getByRole('combobox', { name: 'Shape', exact: true });
   const canvas = page.locator('#field-canvas');
+  const reveal = page.locator('[data-field-action="reveal"]');
   const motion = page.locator('[data-field-action="motion"]');
-  await expect(selector).toBeVisible();
-  await expect(selector).toHaveValue('sphere');
-  await expect(selector.locator('option')).toHaveText(['Rippled sphere', 'Torus', 'Trefoil knot']);
   const pixels = () => canvas.evaluate(element => element.toDataURL());
-  const originalSphere = await pixels();
-  await canvas.focus();
-  await page.keyboard.press('ArrowRight');
-  const rotatedSphere = await pixels();
-  await selector.selectOption('torus');
-  await selector.selectOption('sphere');
-  expect(await pixels()).toBe(rotatedSphere);
-  await canvas.focus();
-  await page.keyboard.press('Home');
-  expect(await pixels()).toBe(originalSphere);
-  await selector.focus();
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
-  await expect(selector).toHaveValue('torus');
-  const results = [];
+  await expect(canvas).toHaveAttribute('role', 'button');
+  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('select, [data-field-action="reset"]')).toHaveCount(0);
+  const sphere = await pixels();
   const directory = process.env.SCREENSHOT_DIR || 'artifacts';
   await mkdir(directory, { recursive: true });
-  for (const shape of ['sphere', 'torus', 'trefoil']) {
-    await selector.selectOption(shape);
-    const image = await pixels();
-    expect(results).not.toContain(image);
-    results.push(image);
-    await expect(motion).toHaveAttribute('aria-pressed', 'false');
-    await page.waitForTimeout(180);
-    expect(await pixels()).toBe(image);
-    await canvas.focus();
-    await page.keyboard.press('ArrowRight');
-    await expect.poll(pixels).not.toBe(image);
-    await page.keyboard.press('Home');
-    await expect.poll(pixels).toBe(image);
-    await expect(selector).toHaveValue(shape);
-    await page.keyboard.press('ArrowUp');
-    await page.locator('[data-field-action="reset"]').click();
-    await expect.poll(pixels).toBe(image);
-    await expect(selector).toHaveValue(shape);
-    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
-    expect(scan.violations).toEqual([]);
-    await page.locator('.field-controls').scrollIntoViewIfNeeded();
-    await page.screenshot({ path: join(directory, `${testInfo.project.name}-shape-${shape}.png`) });
-  }
+  await page.locator('.field-controls').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(directory, `${testInfo.project.name}-sphere.png`) });
+  await reveal.click();
+  await expect(reveal).toHaveText('Show sphere');
+  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
+  await expect(canvas).toHaveAccessibleName('Reveal Kawer');
+  await expect(motion).toBeHidden();
+  const name = await pixels();
+  expect(name).not.toBe(sphere);
+  await page.waitForTimeout(180);
+  expect(await pixels()).toBe(name);
+  await canvas.focus();
+  await page.keyboard.press('ArrowRight');
+  expect(await pixels()).toBe(name);
+  await page.locator('.field-controls').scrollIntoViewIfNeeded();
+  const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(scan.violations).toEqual([]);
+  await page.screenshot({ path: join(directory, `${testInfo.project.name}-name.png`) });
+  await canvas.focus();
+  await page.keyboard.press('Enter');
+  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
+  expect(await pixels()).toBe(sphere);
+  await page.keyboard.press('Space');
+  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
+  expect(await pixels()).toBe(name);
+  await canvas.scrollIntoViewIfNeeded();
+  const bounds = await canvas.boundingBox();
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  if (testInfo.project.name === 'mobile') await page.touchscreen.tap(x, y);
+  else await page.mouse.click(x, y);
+  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
+  await canvas.dispatchEvent('click');
+  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
+  await reveal.click();
+  await expect(motion).toHaveAttribute('aria-pressed', 'false');
+  await motion.click();
+  await expect(motion).toHaveAttribute('aria-pressed', 'true');
+  await reveal.click();
+  await reveal.click();
+  await expect(motion).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('shape morphing preserves paused state, running state, and the last interrupted selection', async ({ page }) => {
+test('name morph holds legibly, preserves rotation preference, and handles rapid toggles', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/');
-  const selector = page.getByRole('combobox', { name: 'Shape', exact: true });
   const canvas = page.locator('#field-canvas');
+  const reveal = page.locator('[data-field-action="reveal"]');
   const motion = page.locator('[data-field-action="motion"]');
+  const pixels = () => canvas.evaluate(element => element.toDataURL());
   await expect(motion).toHaveAttribute('aria-pressed', 'true');
   await motion.click();
+  const pausedSphere = await pixels();
+  await reveal.click();
+  await page.waitForTimeout(1150);
+  const word = await pixels();
+  await page.waitForTimeout(180);
+  expect(await pixels()).toBe(word);
+  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
+  await reveal.click();
+  await page.waitForTimeout(1150);
   await expect(motion).toHaveAttribute('aria-pressed', 'false');
-  const pixels = () => canvas.evaluate(element => element.toDataURL());
-  await selector.selectOption('torus');
+  expect(await pixels()).toBe(pausedSphere);
+  await reveal.click();
   await page.waitForTimeout(100);
-  await selector.selectOption('trefoil');
-  await page.waitForTimeout(850);
-  await expect(selector).toHaveValue('trefoil');
-  await expect(motion).toHaveAttribute('aria-pressed', 'false');
-  const completed = await pixels();
-  await page.waitForTimeout(160);
-  expect(await pixels()).toBe(completed);
-  await selector.selectOption('torus');
+  await reveal.click();
   await page.waitForTimeout(100);
-  await canvas.click();
-  const tapped = await pixels();
-  await page.waitForTimeout(700);
-  expect(await pixels()).toBe(tapped);
+  await reveal.click();
+  await page.waitForTimeout(1150);
+  expect(await pixels()).toBe(word);
+  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await selector.selectOption('sphere');
-  await selector.selectOption('torus');
-  expect(await pixels()).toBe(tapped);
-  await selector.selectOption('sphere');
-  await selector.selectOption('trefoil');
-  expect(await pixels()).toBe(completed);
+  await reveal.click();
+  await reveal.click();
+  expect(await pixels()).toBe(word);
+  await reveal.click();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await motion.click();
-  await selector.selectOption('torus');
+  await reveal.click();
+  await page.waitForTimeout(1150);
+  await reveal.click();
+  await page.waitForTimeout(1150);
   await expect(motion).toHaveAttribute('aria-pressed', 'true');
   const rotating = await pixels();
   await expect.poll(pixels).not.toBe(rotating);
-  await expect(selector).toHaveValue('torus');
 });
 
-test('shape controls remain reachable without overflow at phone and tablet widths', async ({ page }) => {
+test('name and controls fit at narrow phone, phone, and tablet widths', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const width of [320, 390, 768]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
-    const selector = page.getByRole('combobox', { name: 'Shape', exact: true });
-    await selector.selectOption('trefoil');
-    await expect(selector).toBeVisible();
+    await page.locator('[data-field-action="reveal"]').click();
+    await expect(page.locator('#field-canvas')).toHaveAttribute('aria-pressed', 'true');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const controls = await page.locator('.field-controls').boundingBox();
     expect(controls.x).toBeGreaterThanOrEqual(0);
     expect(controls.x + controls.width).toBeLessThanOrEqual(width);
+    const ink = await page.locator('#field-canvas').evaluate(canvas => {
+      const { width, height } = canvas;
+      const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+      let left = width, right = -1, top = height, bottom = -1;
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] > 0) {
+          left = Math.min(left, x); right = Math.max(right, x);
+          top = Math.min(top, y); bottom = Math.max(bottom, y);
+        }
+      }
+      return { left, right, top, bottom, width, height };
+    });
+    expect(ink.right).toBeGreaterThan(ink.left);
+    expect(ink.left).toBeGreaterThan(0);
+    expect(ink.right).toBeLessThan(ink.width - 1);
+    expect(ink.top).toBeGreaterThan(0);
+    expect(ink.bottom).toBeLessThan(ink.height - 1);
   }
+});
+
+test('vertical touch scrolling over the sphere does not reveal the name', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const canvas = page.locator('#field-canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  const bounds = await canvas.boundingBox();
+  const viewport = page.viewportSize();
+  const x = bounds.x + bounds.width / 2;
+  const startY = Math.min(bounds.y + bounds.height * .65, viewport.height - 50);
+  const initial = await page.evaluate(() => scrollY);
+  const client = await page.context().newCDPSession(page);
+  await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+  await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: startY }] });
+  for (let step = 1; step <= 8; step++) {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: startY - step * 20 }] });
+    await page.waitForTimeout(20);
+  }
+  await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(initial + 30);
+  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
 });
