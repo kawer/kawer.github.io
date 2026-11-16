@@ -35,7 +35,7 @@ h1, h2, h3, h4 { line-height: 1.1; font-weight: 400; }
 p { margin-bottom: 1.15rem; }
 hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
 .shell { width: min(1392px, calc(100% - 96px)); margin-inline: auto; }
-.skip-link { position: absolute; z-index: 20; left: 1rem; top: .75rem; padding: .7rem 1rem; background: var(--ink); color: var(--paper); transform: translateY(-200%); }
+.skip-link { position: absolute; z-index: 100; left: 1rem; top: .75rem; padding: .7rem 1rem; background: var(--ink); color: var(--paper); transform: translateY(-200%); }
 .skip-link:focus { transform: translateY(0); }
 .site-header { position: relative; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 2rem; min-height: 100px; }
 .brand { display: inline-flex; align-items: center; gap: .7rem; font-size: 1.05rem; font-weight: 500; letter-spacing: -.035em; text-decoration: none; flex-shrink: 0; }
@@ -51,26 +51,17 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
 .hero-title { font-size: clamp(4rem, 6.1vw, 6.2rem); font-weight: 400; line-height: .95; letter-spacing: -.075em; margin: 0 0 2rem -.055em; }
 .hero-description, .hero-intro { font-size: 1.05rem; line-height: 1.6; max-width: 32ch; color: var(--muted); margin-bottom: 0; }
 .field-stage { position: absolute; z-index: 0; right: -20px; top: -32px; width: 77%; height: calc(100% - 24px); margin: 0; }
-.field-art { position: absolute; left: 50%; top: 46%; height: calc(100% - 64px); width: auto; aspect-ratio: 1; transform: translate(-50%, -50%); overflow: hidden; }
-.field-art canvas, .field-fallback { position: absolute; display: block; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.field-art canvas { touch-action: pan-y pinch-zoom; cursor: grab; }
-.field-art canvas:active { cursor: grabbing; }
-.field-stage[data-field-mode="name"] canvas { cursor: pointer; }
-.field-art canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -6px; }
-.field-art canvas[hidden] { display: none; }
-.field-fallback { pointer-events: none; }
-.field-stage[data-field-ready="true"] .field-fallback { display: none; }
-.field-caption { position: absolute; z-index: 3; left: 20%; bottom: 34px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .15rem 1.5rem; width: 70%; }
-.field-title { grid-column: 1; font-size: .75rem; color: var(--ink); }
-.field-caption > .field-note { grid-column: 1; }
-.field-caption > .field-controls { grid-column: 2; grid-row: 1 / 3; }
-.field-note { color: var(--muted); font-size: .73rem; line-height: 1.5; margin: 0; max-width: 32ch; }
-.field-note strong { display: block; font-weight: 400; color: var(--ink); margin-bottom: .25rem; }
-.field-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; }
-.field-controls button { display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: .5rem .7rem; border: 1px solid transparent; background: transparent; font-size: .73rem; cursor: pointer; }
-.field-controls button:hover { color: var(--accent); border-color: var(--line); }
-.field-controls button[aria-pressed="true"] { color: var(--accent); }
-.field-controls[hidden], .field-controls [hidden] { display: none; }
+.field-art { position: absolute; left: 50%; top: 46%; height: calc(100% - 64px); max-height: max(120px, calc(100svh - 160px)); width: auto; aspect-ratio: 1; transform: translate(-50%, -50%); overflow: hidden; }
+.field-fallback { position: absolute; display: block; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.field-stage[data-field-ready="true"] .field-fallback { visibility: hidden; }
+.scroll-field { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 15; pointer-events: none; }
+.scroll-field[hidden], .brand-dock canvas[hidden] { display: none; }
+.home-page .site-header { position: sticky; top: 0; z-index: 30; background: var(--paper); --dock-opacity: 0; }
+.home-page .brand { position: relative; min-width: 128px; min-height: 44px; }
+.home-page .brand-name { opacity: calc(1 - var(--dock-opacity)); }
+.brand-dock { position: absolute; width: 128px; height: 44px; left: 0; top: 50%; transform: translateY(-50%); opacity: var(--dock-opacity); pointer-events: none; }
+.brand-dock canvas { display: block; width: 100%; height: 100%; }
+.home-page #main, .home-page #selected-work { scroll-margin-top: 120px; }
 .hero-foot { position: relative; z-index: 2; display: flex; align-items: end; justify-content: space-between; gap: 2rem; }
 .hero-foot a { pointer-events: auto; }
 .hero-role { font-size: .85rem; line-height: 1.55; max-width: 33ch; margin-bottom: 0; }
@@ -172,7 +163,6 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
   .hero-title { font-size: 5rem; }
   .hero-description { font-size: 1rem; }
   .hero-heading { width: 36%; }
-  .field-caption { left: 23%; width: 72%; bottom: 5px; }
   .home-background, .two-column { gap: 3rem; }
   .work-item { grid-template-columns: 130px minmax(0, 1fr) 26px; gap: 1.5rem; }
 }
@@ -186,7 +176,6 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
   .hero-title { margin-bottom: 0; font-size: 4.5rem; }
   .hero-description { align-self: end; max-width: 30ch; }
   .field-stage { position: relative; width: calc(100% + 24px); right: 12px; top: auto; height: 560px; margin-top: -20px; }
-  .field-caption { left: 8%; width: 88%; bottom: 0; }
   .hero-foot { margin-top: 2rem; }
   .section { padding-block: 3rem; }
   .home-background { grid-template-columns: 1fr; gap: 2rem; }
@@ -208,13 +197,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
   .hero-title { font-size: 4.6rem; line-height: .93; margin-bottom: 1.5rem; }
   .hero-description { font-size: .95rem; max-width: 34ch; }
   .field-stage { height: 400px; width: calc(100% + 40px); right: 20px; margin-top: 0; }
-  .field-caption { left: 20px; width: calc(100% - 40px); bottom: -12px; gap: .1rem .5rem; grid-template-columns: 1fr; }
   .field-art { height: calc(100% - 84px); }
-  .field-caption > .field-controls { grid-column: 1; grid-row: 3; }
-      .field-note { max-width: 23ch; font-size: .67rem; }
-  .field-title { font-size: .7rem; }
-  .field-controls { gap: .25rem .5rem; }
-  .field-controls button { padding: .4rem; font-size: .7rem; }
   .hero-foot { display: block; margin-top: 2.5rem; }
   .hero-role { font-size: .8rem; }
   .hero-links { margin-top: 1.1rem; gap: 1.5rem; }
@@ -250,9 +233,6 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
   .hero-title { font-size: 4rem; }
   .field-stage { height: 370px; }
   .field-art { height: calc(100% - 84px); }
-  .field-caption { grid-template-columns: 1fr; bottom: -12px; }
-  .field-caption > .field-controls { grid-column: 1; grid-row: 3; }
-  .field-controls { margin-top: .3rem; }
   .hero-foot { margin-top: 2.5rem; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -261,7 +241,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
 @media print {
   :root { background: white; color: black; font-size: 11pt; }
   .shell { width: 100%; max-width: none; }
-  .site-header, .site-footer, .skip-link, .article-toc, .actions, .field-stage, .hero-links { display: none; }
+  .site-header, .site-footer, .skip-link, .article-toc, .actions, .field-stage, .scroll-field, .hero-links { display: none; }
   .lab-hero { height: auto; min-height: 0; display: block; }
   .hero-heading { width: 100%; display: block; }
   .hero-title, .page-title { font-size: 34pt; }

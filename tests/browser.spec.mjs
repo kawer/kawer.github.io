@@ -61,65 +61,15 @@ test('homepage enhancement loads locally and reading pages need no JavaScript', 
 });
 
 
-test('point cloud supports reduced motion, keyboard rotation, and reset', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
-  const canvas = page.locator('#field-canvas');
-  await expect(canvas).toBeVisible();
-  const motion = page.locator('[data-field-action="motion"]');
-  await expect(motion).toBeVisible();
-  await expect(motion).toHaveAttribute('aria-pressed', 'false');
-  const pixels = () => canvas.evaluate(element => element.toDataURL());
-  const resting = await pixels();
-  await page.waitForTimeout(150);
-  expect(await pixels()).toBe(resting);
-  await expect(page.locator('[data-field-action="left"], [data-field-action="right"]')).toHaveCount(0);
-  await canvas.focus();
-  await page.keyboard.press('ArrowLeft');
-  await expect.poll(pixels).not.toBe(resting);
-  await canvas.focus();
-  await page.keyboard.press('Home');
-  await expect.poll(pixels).toBe(resting);
-  await motion.click();
-  await expect(motion).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(pixels).not.toBe(resting);
-  await motion.click();
-  await expect(motion).toHaveAttribute('aria-pressed', 'false');
-});
-
-test('geometry can be rotated by pointer and keyboard controls', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
-  const canvas = page.locator('#field-canvas');
-  await expect(canvas).toBeVisible();
-  const pixels = () => canvas.evaluate(element => element.toDataURL());
-  await canvas.scrollIntoViewIfNeeded();
-  const initial = await pixels();
-  const bounds = await canvas.boundingBox();
-  expect(bounds).toBeTruthy();
-  await page.mouse.move(bounds.x + bounds.width * .55, bounds.y + bounds.height * .5);
-  await page.mouse.down();
-  await page.mouse.move(bounds.x + bounds.width * .7, bounds.y + bounds.height * .6, { steps: 5 });
-  await page.mouse.up();
-  await expect.poll(pixels).not.toBe(initial);
-  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
-  const rotated = await pixels();
-  await canvas.focus();
-  await expect(canvas).toHaveAttribute('role', 'button');
-  await expect(canvas).toHaveAttribute('tabindex', '0');
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(pixels).not.toBe(rotated);
-  await page.keyboard.press('Home');
-  await expect.poll(pixels).toBe(initial);
-});
-
 test.describe('without JavaScript', () => {
   test.use({ javaScriptEnabled: false });
   test('static geometric artwork and content remain available', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.field-fallback')).toBeVisible();
     await expect(page.locator('#field-canvas')).toBeHidden();
-    await expect(page.locator('.field-controls')).toBeHidden();
+    await expect(page.locator('button, select, [role="button"]')).toHaveCount(0);
+    await expect(page.locator('.brand-name')).toBeVisible();
+    await expect(page.locator('#brand-canvas')).toBeHidden();
     await expect(page.locator('h1')).toBeVisible();
     await page.locator('.site-nav').getByRole('link', { name: 'Work', exact: true }).click();
     await expect(page).toHaveURL(/\/work\/$/);
@@ -165,146 +115,203 @@ for (const route of ['/', '/work/']) {
 }
 
 
-test('Kawer can be revealed by its button, keyboard, pointer, and assistive click', async ({ page }, testInfo) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
+const fieldMetrics = page => page.evaluate(() => {
+  const art = document.querySelector('.field-art').getBoundingClientRect();
+  const hero = document.querySelector('.lab-hero').getBoundingClientRect();
+  const header = document.querySelector('.site-header').getBoundingClientRect();
+  const start = Math.max(0, art.bottom + scrollY - innerHeight + 24);
+  const end = Math.max(start + 1, hero.bottom + scrollY - header.height);
+  return { start, end };
+});
+const progress = page => page.locator('.field-stage').getAttribute('data-field-progress').then(Number);
+const canvasDigest = canvas => canvas.evaluate(async element => {
+  const bytes = new TextEncoder().encode(element.toDataURL());
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+});
+const opacity = element => element.evaluate(node => {
+  let result = 1;
+  for (let current = node; current; current = current.parentElement) result *= Number(getComputedStyle(current).opacity);
+  return result;
+});
+async function readyField(page) {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/');
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-ready', 'true');
+}
+async function nativeScroll(page, y) {
+  await page.evaluate(top => scrollTo({ top, behavior: 'instant' }), y);
+  await expect.poll(() => page.evaluate(target => Math.abs(scrollY - target), y)).toBeLessThanOrEqual(1);
+  const { start, end } = await fieldMetrics(page);
+  const expected = await page.evaluate(({ start, end }) => Math.max(0, Math.min(1, (scrollY - start) / (end - start))), { start, end });
+  await expect.poll(() => progress(page)).toBeGreaterThanOrEqual(expected - .002);
+  await expect.poll(() => progress(page)).toBeLessThanOrEqual(expected + .002);
+}
+async function assertDockBounds(page) {
+  const bounds = await page.evaluate(() => {
+    const rectangle = element => {
+      const { left, right, top, bottom } = element.getBoundingClientRect();
+      return { left, right, top, bottom };
+    };
+    return {
+      header: rectangle(document.querySelector('.site-header')),
+      dock: rectangle(document.querySelector('.brand-dock')),
+      links: [...document.querySelectorAll('.site-nav a')].map(rectangle),
+    };
+  });
+  expect(bounds.header.top).toBeGreaterThanOrEqual(-1);
+  expect(bounds.header.top).toBeLessThanOrEqual(1);
+  expect(bounds.dock.left).toBeGreaterThanOrEqual(bounds.header.left);
+  expect(bounds.dock.right).toBeLessThanOrEqual(bounds.header.right);
+  expect(bounds.dock.top).toBeGreaterThanOrEqual(bounds.header.top);
+  expect(bounds.dock.bottom).toBeLessThanOrEqual(bounds.header.bottom);
+  for (const link of bounds.links) {
+    const intersects = Math.min(link.right, bounds.dock.right) > Math.max(link.left, bounds.dock.left)
+      && Math.min(link.bottom, bounds.dock.bottom) > Math.max(link.top, bounds.dock.top);
+    expect(intersects).toBe(false);
+  }
+}
+
+test('scroll artwork is decorative, control-free, and idle between native scroll events', async ({ page }) => {
+  await page.addInitScript(() => {
+    const request = window.requestAnimationFrame.bind(window);
+    window.__qaAnimationRequests = 0;
+    window.requestAnimationFrame = callback => { window.__qaAnimationRequests++; return request(callback); };
+  });
+  await readyField(page);
   const canvas = page.locator('#field-canvas');
-  const reveal = page.locator('[data-field-action="reveal"]');
-  const motion = page.locator('[data-field-action="motion"]');
-  const pixels = () => canvas.evaluate(element => element.toDataURL());
-  await expect(canvas).toHaveAttribute('role', 'button');
-  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('select, [data-field-action="reset"]')).toHaveCount(0);
-  const sphere = await pixels();
+  await expect(page.locator('button, select, [role="button"]')).toHaveCount(0);
+  await expect(canvas).toHaveAttribute('aria-hidden', 'true');
+  expect(await canvas.getAttribute('role')).toBeNull();
+  expect(await canvas.getAttribute('tabindex')).toBeNull();
+  expect(await canvas.evaluate(element => getComputedStyle(element).pointerEvents)).toBe('none');
+  expect(await canvas.evaluate(element => getComputedStyle(element).position)).toBe('fixed');
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state', 'sphere');
+  await page.waitForTimeout(140);
+  const image = await canvasDigest(canvas);
+  const requests = await page.evaluate(() => window.__qaAnimationRequests);
+  await page.waitForTimeout(180);
+  expect(await canvasDigest(canvas)).toBe(image);
+  expect(await page.evaluate(() => window.__qaAnimationRequests)).toBeLessThanOrEqual(requests + 1);
+  await page.mouse.move(300, 350);
+  await page.mouse.wheel(0, 180);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
+});
+
+test('scroll morph reverses deterministically and docks a tappable native brand', async ({ page }, testInfo) => {
+  await readyField(page);
+  const stage = page.locator('.field-stage');
+  const canvas = page.locator('#field-canvas');
   const directory = process.env.SCREENSHOT_DIR || 'artifacts';
   await mkdir(directory, { recursive: true });
-  await page.locator('.field-controls').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: join(directory, `${testInfo.project.name}-sphere.png`) });
-  await reveal.click();
-  await expect(reveal).toHaveText('Show sphere');
-  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvas).toHaveAccessibleName('Reveal Kawer');
-  await expect(motion).toBeHidden();
-  const name = await pixels();
-  expect(name).not.toBe(sphere);
-  await page.waitForTimeout(180);
-  expect(await pixels()).toBe(name);
-  await canvas.focus();
-  await page.keyboard.press('ArrowRight');
-  expect(await pixels()).toBe(name);
-  await page.locator('.field-controls').scrollIntoViewIfNeeded();
-  const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
-  expect(scan.violations).toEqual([]);
-  await page.screenshot({ path: join(directory, `${testInfo.project.name}-name.png`) });
-  await canvas.focus();
-  await page.keyboard.press('Enter');
-  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
-  expect(await pixels()).toBe(sphere);
-  await page.keyboard.press('Space');
-  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
-  expect(await pixels()).toBe(name);
-  await canvas.scrollIntoViewIfNeeded();
-  const bounds = await canvas.boundingBox();
-  const x = bounds.x + bounds.width / 2;
-  const y = bounds.y + bounds.height / 2;
+  const original = await canvasDigest(canvas);
+  const { start, end } = await fieldMetrics(page);
+  await page.screenshot({ path: join(directory, `${testInfo.project.name}-initial.png`) });
+  if (start > 2) {
+    await nativeScroll(page, start - 2);
+    await expect(stage).toHaveAttribute('data-field-state', 'sphere');
+  }
+  const middle = start + (end - start) * .45;
+  await nativeScroll(page, middle);
+  await expect(stage).toHaveAttribute('data-field-state', 'morph');
+  const halfway = await canvasDigest(canvas);
+  expect(halfway).not.toBe(original);
+  const middleScan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(middleScan.violations).toEqual([]);
+  await page.screenshot({ path: join(directory, `${testInfo.project.name}-middle.png`) });
+  await nativeScroll(page, end + 40);
+  await expect(stage).toHaveAttribute('data-field-state', 'docked');
+  await expect(canvas).toBeHidden();
+  await expect.poll(() => opacity(page.locator('.brand-dock'))).toBeGreaterThan(.95);
+  await expect.poll(() => opacity(page.locator('.brand-name'))).toBeLessThan(.05);
+  await assertDockBounds(page);
+  const dockedScan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(dockedScan.violations).toEqual([]);
+  await page.screenshot({ path: join(directory, `${testInfo.project.name}-docked.png`) });
+  await nativeScroll(page, middle);
+  expect(await canvasDigest(canvas)).toBe(halfway);
+  await nativeScroll(page, 0);
+  expect(await canvasDigest(canvas)).toBe(original);
+  await nativeScroll(page, end + 40);
+  const dock = await page.locator('.brand-dock').boundingBox();
+  const x = dock.x + dock.width / 2, y = dock.y + dock.height / 2;
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('a')?.classList.contains('brand'), { x, y })).toBe(true);
   if (testInfo.project.name === 'mobile') await page.touchscreen.tap(x, y);
   else await page.mouse.click(x, y);
-  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
-  await canvas.dispatchEvent('click');
-  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
-  await reveal.click();
-  await expect(motion).toHaveAttribute('aria-pressed', 'false');
-  await motion.click();
-  await expect(motion).toHaveAttribute('aria-pressed', 'true');
-  await reveal.click();
-  await reveal.click();
-  await expect(motion).toHaveAttribute('aria-pressed', 'false');
+  await expect(page).toHaveURL('http://127.0.0.1:4173/');
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(1);
 });
 
-test('name morph holds legibly, preserves rotation preference, and handles rapid toggles', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
+test('direct anchors, reload restoration, and resized layouts recompute docking', async ({ page }) => {
+  await readyField(page);
+  await page.goto('/#selected-work');
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(() => progress(page)).toBeGreaterThan(.95);
+  await expect.poll(() => opacity(page.locator('.brand-dock'))).toBeGreaterThan(.95);
+  await assertDockBounds(page);
   await page.goto('/');
-  const canvas = page.locator('#field-canvas');
-  const reveal = page.locator('[data-field-action="reveal"]');
-  const motion = page.locator('[data-field-action="motion"]');
-  const pixels = () => canvas.evaluate(element => element.toDataURL());
-  await expect(motion).toHaveAttribute('aria-pressed', 'true');
-  await motion.click();
-  const pausedSphere = await pixels();
-  await reveal.click();
-  await page.waitForTimeout(1150);
-  const word = await pixels();
-  await page.waitForTimeout(180);
-  expect(await pixels()).toBe(word);
-  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
-  await reveal.click();
-  await page.waitForTimeout(1150);
-  await expect(motion).toHaveAttribute('aria-pressed', 'false');
-  expect(await pixels()).toBe(pausedSphere);
-  await reveal.click();
-  await page.waitForTimeout(100);
-  await reveal.click();
-  await page.waitForTimeout(100);
-  await reveal.click();
-  await page.waitForTimeout(1150);
-  expect(await pixels()).toBe(word);
-  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await reveal.click();
-  await reveal.click();
-  expect(await pixels()).toBe(word);
-  await reveal.click();
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await motion.click();
-  await reveal.click();
-  await page.waitForTimeout(1150);
-  await reveal.click();
-  await page.waitForTimeout(1150);
-  await expect(motion).toHaveAttribute('aria-pressed', 'true');
-  const rotating = await pixels();
-  await expect.poll(pixels).not.toBe(rotating);
-});
-
-test('name and controls fit at narrow phone, phone, and tablet widths', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  for (const width of [320, 390, 768]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/');
-    await page.locator('[data-field-action="reveal"]').click();
-    await expect(page.locator('#field-canvas')).toHaveAttribute('aria-pressed', 'true');
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    const controls = await page.locator('.field-controls').boundingBox();
-    expect(controls.x).toBeGreaterThanOrEqual(0);
-    expect(controls.x + controls.width).toBeLessThanOrEqual(width);
-    const ink = await page.locator('#field-canvas').evaluate(canvas => {
-      const { width, height } = canvas;
-      const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
-      let left = width, right = -1, top = height, bottom = -1;
-      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-        if (data[(y * width + x) * 4 + 3] > 0) {
-          left = Math.min(left, x); right = Math.max(right, x);
-          top = Math.min(top, y); bottom = Math.max(bottom, y);
-        }
-      }
-      return { left, right, top, bottom, width, height };
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-ready', 'true');
+  let metrics = await fieldMetrics(page);
+  await nativeScroll(page, metrics.start + (metrics.end - metrics.start) * .55);
+  const before = await progress(page);
+  await page.reload();
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-ready', 'true');
+  await expect.poll(() => progress(page)).toBeGreaterThan(before - .015);
+  await expect.poll(() => progress(page)).toBeLessThan(before + .015);
+  for (const viewport of [{ width: 320, height: 900 }, { width: 390, height: 900 }, { width: 768, height: 900 }, { width: 844, height: 390 }, { width: 736, height: 414 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(() => document.fonts.ready);
+    metrics = await fieldMetrics(page);
+    await nativeScroll(page, metrics.start);
+    const fit = await page.evaluate(async () => {
+      const { createSurface, projectSurface, INITIAL_YAW, INITIAL_PITCH } = await import('/assets/js/geometry.mjs');
+      const points = projectSurface(createSurface(), INITIAL_YAW, INITIAL_PITCH);
+      const art = document.querySelector('.field-art').getBoundingClientRect();
+      return {
+        top: art.top + art.height / 2 + Math.min(...points.map(point => point.y)) * art.width * .345,
+        bottom: art.top + art.height / 2 + Math.max(...points.map(point => point.y)) * art.width * .345,
+        header: document.querySelector('.site-header').getBoundingClientRect().bottom,
+        height: innerHeight,
+      };
     });
-    expect(ink.right).toBeGreaterThan(ink.left);
-    expect(ink.left).toBeGreaterThan(0);
-    expect(ink.right).toBeLessThan(ink.width - 1);
-    expect(ink.top).toBeGreaterThan(0);
-    expect(ink.bottom).toBeLessThan(ink.height - 1);
+    expect(fit.top).toBeGreaterThan(fit.header + 8);
+    expect(fit.bottom).toBeLessThan(fit.height - 8);
+    await nativeScroll(page, metrics.start + (metrics.end - metrics.start) * .5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await nativeScroll(page, metrics.end + 40);
+    await assertDockBounds(page);
   }
 });
 
-test('vertical touch scrolling over the sphere does not reveal the name', async ({ page }) => {
+test('reduced motion keeps the static sphere and ordinary native brand', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  const canvas = page.locator('#field-canvas');
-  await canvas.scrollIntoViewIfNeeded();
-  const bounds = await canvas.boundingBox();
+  const stage = page.locator('.field-stage');
+  await expect(stage).toHaveAttribute('data-field-state', 'static');
+  expect(await stage.getAttribute('data-field-ready')).toBeNull();
+  await expect(page.locator('.field-fallback')).toBeVisible();
+  await expect(page.locator('#field-canvas')).toBeHidden();
+  await expect(page.locator('#brand-canvas')).toBeHidden();
+  const { end } = await fieldMetrics(page);
+  await page.evaluate(top => scrollTo(0, top), end + 40);
+  await expect(stage).toHaveAttribute('data-field-state', 'static');
+  await expect(page.locator('.brand-name')).toBeVisible();
+  expect(await opacity(page.locator('.brand-name'))).toBe(1);
+  await expect(page.locator('button, select, [role="button"]')).toHaveCount(0);
+});
+
+test('keyboard and touch scrolling over the decorative canvas retain native behavior', async ({ page }) => {
+  await readyField(page);
+  await page.keyboard.press('PageDown');
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
+  await nativeScroll(page, 0);
+  await page.locator('.field-art').scrollIntoViewIfNeeded();
+  const art = await page.locator('.field-art').boundingBox();
   const viewport = page.viewportSize();
-  const x = bounds.x + bounds.width / 2;
-  const startY = Math.min(bounds.y + bounds.height * .65, viewport.height - 50);
+  const x = art.x + art.width / 2;
+  const startY = Math.min(art.y + art.height * .65, viewport.height - 50);
   const initial = await page.evaluate(() => scrollY);
   const client = await page.context().newCDPSession(page);
   await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
@@ -315,5 +322,5 @@ test('vertical touch scrolling over the sphere does not reveal the name', async 
   }
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(initial + 30);
-  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#field-canvas')).toHaveAttribute('aria-hidden', 'true');
 });

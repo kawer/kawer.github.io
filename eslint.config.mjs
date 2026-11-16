@@ -11,5 +11,5 @@ export default [
     },
     rules: { 'no-unused-vars': ['error', { argsIgnorePattern: '^_' }] }
   },
-  { files: ['assets/js/**/*.{js,mjs}'], languageOptions: { globals: { document: 'readonly', performance: 'readonly', matchMedia: 'readonly', devicePixelRatio: 'readonly', requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly', IntersectionObserver: 'readonly', ResizeObserver: 'readonly' } } }
+  { files: ['assets/js/**/*.{js,mjs}'], languageOptions: { globals: { document: 'readonly', window: 'readonly', performance: 'readonly', matchMedia: 'readonly', devicePixelRatio: 'readonly', requestAnimationFrame: 'readonly', cancelAnimationFrame: 'readonly', IntersectionObserver: 'readonly', ResizeObserver: 'readonly' } } }
 ];
