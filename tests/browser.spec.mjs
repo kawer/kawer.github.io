@@ -306,6 +306,20 @@ test('keyboard and touch scrolling over the decorative canvas retain native beha
   await readyField(page);
   await page.keyboard.press('PageDown');
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
+  // Native keyboard scrolling may still be easing after it first crosses 100px.
+  // Observe its completion before testing a separate instant scroll and gesture.
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    let previous = scrollY, stableFrames = 0, frames = 0;
+    const settle = () => {
+      const current = scrollY;
+      stableFrames = Math.abs(current - previous) < .01 ? stableFrames + 1 : 0;
+      previous = current;
+      if (stableFrames >= 6) { resolve(); return; }
+      if (++frames >= 180) { reject(new Error('Native keyboard scroll did not settle')); return; }
+      requestAnimationFrame(settle);
+    };
+    requestAnimationFrame(settle);
+  }));
   await nativeScroll(page, 0);
   await page.locator('.field-art').scrollIntoViewIfNeeded();
   const art = await page.locator('.field-art').boundingBox();
