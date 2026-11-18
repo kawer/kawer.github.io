@@ -24,23 +24,25 @@ The browser tests start their own preview server. Screenshots and test reports a
 ## Content
 
 - `content/profile.json`: verified public biography and profile links.
-- `content/work/*.md`: engineering case studies.
-- `content/writing/*.md`: technical writing.
+- `content/work/*.md`: unpublished engineering material retained for future revision.
+- `content/writing/*.md`: unpublished writing material retained for future revision.
 - `scripts/templates.mjs`: reusable HTML templates and page layouts.
 - `assets/css/site.css`: responsive design tokens and components.
 - `assets/js/field.js` and `geometry.mjs`: original interactive geometry, loaded only on the homepage.
 - `scripts/field-svg.mjs`: builds the static SVG fallback from the same geometry.
 - `assets/fonts/`: locally hosted IBM Plex Sans and its open font license.
 
-Markdown frontmatter requires `title`, `description`, `date` (`YYYY-MM-DD`), and `status` (`published` or `draft`). Optional metadata includes `tags` and `source`. Only `published` entries generate routes, listings, or sitemap entries. Raw HTML in Markdown is disabled. Code fences and KaTeX notation (`$...$`, `$$...$$`) render during the build, with local styles/fonts available in `dist/assets/css`.
+The public site has Home, About, and Résumé. Work, Writing, individual work overviews, and legacy blog routes are withdrawn. The build does not load or generate either Markdown collection, including their indexes. They are absent from navigation, homepage sections, and the sitemap. Old URLs receive the ordinary 404 page.
+
+The Markdown parser and article templates remain available for future authoring. Frontmatter requires `title`, `description`, `date` (`YYYY-MM-DD`), and `status` (`published` or `draft`). Optional metadata includes `tags` and `source`. The parser excludes drafts, disables raw HTML, and supports code fences and KaTeX notation. Restoring a section requires an intentional build and navigation change as well as content review; changing a status alone cannot publish it. Math assets are not copied while articles are disabled.
 
 Changing `status` is a publication decision. Verify all claims and disclosure permissions first. Drafts contain review prompts, never confidential implementation details. Keep sensitive notes outside this public repository; `.private/` is ignored.
 
-The existing résumé PDF is preserved byte-for-byte. Legacy résumé and blog URLs remain navigable. The old blog article is withheld from the built artifact while disclosure is reviewed.
+The existing résumé PDF is preserved byte-for-byte, including the legacy résumé URL. All blog material remains outside the built artifact.
 
 ## Visual direction
 
-The personal laboratory direction takes inspiration from BlueYard’s exploratory character, using original geometry and an independent palette and layout. The rippled sphere opens the homepage. Normal scrolling morphs it into geometric KAWER lettering, shrinks it, and hands it off to the sticky header’s native home link. Scrolling back reverses the same progress exactly. On mobile, the complete orb is visible before the animation begins. There are no artwork buttons, selectors, click gestures, or continuous animation. Rendering is requested only on scroll/layout events, with no idle animation loop. Reduced-motion and no-JavaScript visitors get the static sphere and ordinary header brand. Work rows remain native links across their title, description, whitespace, and arrow.
+The personal laboratory direction takes inspiration from BlueYard’s exploratory character, using original geometry and an independent palette and layout. The rippled sphere opens the homepage. Normal scrolling morphs it into geometric KAWER lettering, shrinks it, and hands it off to the sticky header’s native home link. Scrolling back reverses the same progress exactly. On mobile, the complete orb is visible before the animation begins. There are no artwork buttons, selectors, click gestures, or continuous animation. Rendering is requested only on scroll/layout events, with no idle animation loop. Reduced-motion and no-JavaScript visitors get the static sphere and ordinary header brand. The homepage scroll link targets Background.
 
 ## Deployment
 

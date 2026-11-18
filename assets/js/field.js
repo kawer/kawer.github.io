@@ -44,7 +44,9 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
     artSize = rect.width;
     // Mobile sees the complete orb before the transformation begins.
     start = Math.max(0,rect.bottom+window.scrollY-window.innerHeight+24);
-    end = Math.max(start+1,hero.getBoundingClientRect().bottom+window.scrollY-header.getBoundingClientRect().height);
+    const heroEnd = hero.getBoundingClientRect().bottom+window.scrollY-header.getBoundingClientRect().height;
+    const scrollLimit = Math.max(0,document.documentElement.scrollHeight-window.innerHeight);
+    end = Math.max(start+1,Math.min(heroEnd,scrollLimit));
     const target = dock.getBoundingClientRect();
     fit(mini,miniContext,target.width,target.height);
     paint(miniContext,projectSurface(name,0,0),target.width/2,target.height/2,target.width/2.9,0.45);

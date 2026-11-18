@@ -1,5 +1,11 @@
 # Validation
 
+## Content withdrawal — 18 November 2026
+
+Engineering Work and Writing are removed from the homepage, shared navigation, generated routes, and sitemap. Legacy blog routes are also absent. The former work overviews are drafts and the build no longer loads either collection. Existing route/resource checks now cover Home, About, and Résumé; publication-boundary checks also reject retired route files and links. Browser coverage retains the scroll morph, docking, native input, accessibility, responsive layouts, and static fallbacks, with the direct scroll anchor updated to Background. Tests check that retired URLs return 404. The previous full-release measurements below describe the initial version.
+
+`npm run check` passes, including all seven Node tests. All 28 desktop/mobile Chromium tests pass, with zero violations across 12 axe scans. Testing found that the shorter desktop page could end before the orb finished docking; its endpoint now respects the available native scroll distance. No extra scrolling space is added. Updated desktop/mobile screenshots are captured by the browser suite.
+
 Reviewed 16 November 2026 against the control-free scroll-morph design. No production deployment or merge was performed.
 
 ## Automated checks

@@ -1,7 +1,7 @@
 ---
 title: Production AI evaluation & agent reliability
 description: A brief public overview of AI evaluation work in Windows Fundamentals at Microsoft.
-status: published
+status: draft
 date: 2026-11-13
 source: https://kawer.dev/docs/Lazaro_Kawer_Resume.pdf
 tags: [Evaluation, Agent systems]

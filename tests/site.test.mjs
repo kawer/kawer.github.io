@@ -19,7 +19,7 @@ const htmlFiles = (await files(root)).filter(file => file.endsWith('.html'));
 
 test('primary routes exist with one h1, language and unique metadata', async () => {
   const descriptions = new Set();
-  for (const route of ['', 'work', 'writing', 'about', 'resume']) {
+  for (const route of ['', 'about', 'resume']) {
     const html = await readFile(join(root, route, 'index.html'), 'utf8');
     assert.match(html, /<html[^>]*lang="en"/);
     assert.equal((html.match(/<h1[\s>]/g) || []).length, 1, route);
@@ -71,9 +71,12 @@ test('unpublished content and repository internals cannot enter deployment', asy
       }
     }
   }
-  const legacy = await readFile(join(root, 'docs/blog/bi-directional-taxonomies.html'), 'utf8');
-  assert.match(legacy, /under review/);
-  assert.match(legacy, /noindex/);
+  assert.ok(!output.some(path => /^(?:work|writing|docs\/blog)(?:\/|$)/.test(relative(root, path))));
+  for (const file of htmlFiles) {
+    const html = await readFile(file, 'utf8');
+    assert.doesNotMatch(html, /(?:href|src)="\/(?:work|writing|docs\/blog)(?:\/|")/);
+    assert.doesNotMatch(html, /Engineering work|Articles are in preparation|Notes on evaluation and reliable ML systems are in preparation/);
+  }
 });
 
 test('résumé bytes and custom-domain deployment files are preserved', async () => {
@@ -82,7 +85,8 @@ test('résumé bytes and custom-domain deployment files are preserved', async ()
   assert.equal((await readFile('dist/CNAME', 'utf8')).trim(), 'kawer.dev');
   assert.match(await readFile('dist/robots.txt', 'utf8'), /Sitemap: https:\/\/kawer\.dev\/sitemap.xml/);
   const sitemap = await readFile('dist/sitemap.xml', 'utf8');
-  for (const route of ['', 'work/', 'writing/', 'about/', 'resume/']) assert.ok(sitemap.includes(`https://kawer.dev/${route}<`));
+  for (const route of ['', 'about/', 'resume/']) assert.ok(sitemap.includes(`https://kawer.dev/${route}<`));
+  assert.doesNotMatch(sitemap, /\/(?:work|writing|docs\/blog)\//);
 });
 
 test('editorial pipeline excludes draft bodies and renders safe code and mathematical notation', async () => {

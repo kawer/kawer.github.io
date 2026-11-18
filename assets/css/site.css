@@ -61,7 +61,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.5rem; }
 .home-page .brand-name { opacity: calc(1 - var(--dock-opacity)); }
 .brand-dock { position: absolute; width: 128px; height: 44px; left: 0; top: 50%; transform: translateY(-50%); opacity: var(--dock-opacity); pointer-events: none; }
 .brand-dock canvas { display: block; width: 100%; height: 100%; }
-.home-page #main, .home-page #selected-work { scroll-margin-top: 120px; }
+.home-page #main, .home-page #background { scroll-margin-top: 120px; }
 .hero-foot { position: relative; z-index: 2; display: flex; align-items: end; justify-content: space-between; gap: 2rem; }
 .hero-foot a { pointer-events: auto; }
 .hero-role { font-size: .85rem; line-height: 1.55; max-width: 33ch; margin-bottom: 0; }

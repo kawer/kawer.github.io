@@ -3,7 +3,7 @@ export const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (cha
 const e = escapeHtml;
 const link = (url, label, className = 'text-link') => `<a class="${className}" href="${e(url)}">${label}</a>`;
 const arrow = '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 13 13 3M3 3h10v10" stroke="currentColor" stroke-width="1.2"/></svg>';
-const nav = [['/work/','Work'],['/writing/','Writing'],['/about/','About'],['/resume/','Résumé']];
+const nav = [['/about/','About'],['/resume/','Résumé']];
 export function renderPage({title, description, path, body, section = undefined, noindex = false, interactive = false}) {
   const fullTitle = title === 'Lazaro Kawer' ? 'Lazaro Kawer — AI & ML Engineering' : `${title} · Lazaro Kawer`;
   return `<!doctype html>
@@ -26,12 +26,10 @@ function experience(profile) {
 }
 function sources(profile) { return `<p class="source-note">Background summarized from the ${link(profile.profiles.resume,'public résumé')}. Technical descriptions are limited to public, high-level information.</p>`; }
 export function renderHome(profile) {
- const body = `<section class="lab-hero" aria-label="Introduction"><div class="hero-heading"><p class="hero-kicker">AI & ML engineer</p><h1 class="hero-title">Lazaro<br>Kawer</h1><p class="hero-description">${e(profile.intro)}</p><div class="hero-links">${link('/work/','Explore the work '+arrow)}${link('/docs/Lazaro_Kawer_Resume.pdf','Résumé PDF '+arrow)}</div></div>
+ const body = `<section class="lab-hero" aria-label="Introduction"><div class="hero-heading"><p class="hero-kicker">AI & ML engineer</p><h1 class="hero-title">Lazaro<br>Kawer</h1><p class="hero-description">${e(profile.intro)}</p><div class="hero-links">${link(profile.profiles.github,'GitHub '+arrow)}${link('/docs/Lazaro_Kawer_Resume.pdf','Résumé PDF '+arrow)}</div></div>
 <figure class="field-stage" aria-hidden="true"><div class="field-art"><img class="field-fallback" src="/assets/field.svg" width="900" height="900" alt="" fetchpriority="high"><canvas id="field-canvas" width="900" height="900" aria-hidden="true" hidden></canvas></div></figure>
-<div class="hero-foot"><p class="hero-role">Senior Research Engineer<br><span>Microsoft · Windows Fundamentals</span></p><a class="hero-scroll" href="#selected-work">Selected work <span aria-hidden="true">↓</span></a></div></section>
-<section class="section home-work" aria-labelledby="selected-work"><div class="section-heading"><h2 id="selected-work" class="section-title">Engineering work</h2><p class="section-note">Evaluation, prediction, and the systems<br>that connect models to engineering decisions.</p></div>${workRows(profile.work)}<p class="source-note">Public overviews. Detailed technical case studies are pending disclosure review.</p></section>
-<section class="section home-background" aria-labelledby="background"><div class="section-heading"><h2 id="background" class="section-title">Background</h2>${link('/about/','About me '+arrow)}</div>${experience(profile)}</section>
-<section class="section writing-strip"><h2 class="section-title">Writing</h2><div><p>Notes on evaluation and reliable ML systems are in preparation.</p>${link('/writing/','Visit writing '+arrow)}</div></section>`;
+<div class="hero-foot"><p class="hero-role">Senior Research Engineer<br><span>Microsoft · Windows Fundamentals</span></p><a class="hero-scroll" href="#background">Background <span aria-hidden="true">↓</span></a></div></section>
+<section class="section home-background" aria-labelledby="background"><div class="section-heading"><h2 id="background" class="section-title">Background</h2>${link('/about/','About me '+arrow)}</div>${experience(profile)}</section>`;
  return renderPage({title:'Lazaro Kawer',description:profile.intro,path:'/',body,interactive:true});
 }
 export function renderAbout(profile) {
@@ -53,4 +51,4 @@ export function renderArticle(kind, item, html) {
  const body = `<header class="page-heading"><p class="eyebrow">${link('/'+kind+'/',isWork?'← Engineering work':'← Writing')}</p><p class="article-meta">${isWork?'Public overview':e(item.date||'Technical note')} · ${item.readingMinutes} min read</p><h1 class="page-title">${e(item.title)}</h1><p class="lede">${e(item.description)}</p></header><article class="prose narrow">${html}</article><div class="section">${link('/'+kind+'/',isWork?'All engineering work →':'All writing →')}</div>`;
  return renderPage({title:item.title,description:item.description,path:item.url,body,section:kind});
 }
-export function render404() {return renderPage({title:'Page not found',description:'This page could not be found.',path:'/404.html',noindex:true,body:'<header class="page-heading"><p class="article-meta">404</p><h1 class="page-title">A missing page.</h1><p class="lede">The address may have changed. Start at the homepage or explore the work.</p><div class="actions"><a class="button" href="/">Go home</a><a class="button button-secondary" href="/work/">Explore work</a></div></header>'});}
+export function render404() {return renderPage({title:'Page not found',description:'This page could not be found.',path:'/404.html',noindex:true,body:'<header class="page-heading"><p class="article-meta">404</p><h1 class="page-title">A missing page.</h1><p class="lede">The address may have changed. Start at the homepage.</p><div class="actions"><a class="button" href="/">Go home</a></div></header>'});}

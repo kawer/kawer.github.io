@@ -1,5 +1,11 @@
 # Architecture and review decisions
 
+## Current publication scope — 18 November 2026
+
+After the initial release, the owner requested withdrawal of Engineering Work and Writing. The site now generates only Home, About, Résumé, and the noindex 404 document. Neither Markdown collection is loaded by the build. Work overviews are marked draft; all collection sources and reusable article templates remain in source for future revision. No collection index, project page, legacy blog notice, or math assets enter the deployment. Their old URLs return 404 rather than remaining available behind hidden navigation. Homepage and error-page links point only to available destinations; the scroll cue targets Background. The orb's scroll endpoint is capped at the page's available scroll distance so it can still dock on the shorter homepage. Geometry, interaction, and career facts are unchanged.
+
+The sections below record the original implementation decisions; this publication scope supersedes their descriptions of live Work, Writing, and legacy article routes.
+
 ## Existing project
 
 The source repository was a plain HTML/CSS GitHub Pages site using HTML5 UP Aerial. It had a single landing page, bundled icon fonts, decorative background layers, inline touch/scroll handlers, two résumé PDFs, and a separate HTML blog. There was no package manager, build pipeline, automated linting, type checking, or browser test suite. The deployment workflow uploaded the entire repository. The landing page disabled mobile zoom and touch scrolling; it had limited metadata and icon-only navigation.

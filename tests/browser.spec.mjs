@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 
-const pages = ['/', '/work/', '/writing/', '/about/', '/resume/', '/work/production-ai-evaluation/', '/work/on-device-predictive-ml/', '/work/statistical-decision-systems/', '/docs/blog/bi-directional-taxonomies.html', '/404.html'];
+const pages = ['/', '/about/', '/resume/', '/404.html'];
 for (const route of pages) {
   test(`${route} renders accessibly without horizontal overflow`, async ({ page }, testInfo) => {
     const errors = [];
@@ -28,7 +28,7 @@ test('keyboard skip link and primary navigation work', async ({ page }) => {
   await expect(skip).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#main/);
-  for (const name of ['Work', 'Writing', 'About', 'Résumé']) {
+  for (const name of ['About', 'Résumé']) {
     await page.locator('.site-nav').getByRole('link', { name, exact: true }).click();
     await expect(page.locator('h1')).toBeVisible();
     await expect(page.locator('.site-nav a[aria-current="page"]')).toHaveText(name);
@@ -41,7 +41,7 @@ test('homepage remains usable at narrow, tablet, and laptop widths', async ({ pa
     await page.goto('/');
     await expect(page.locator('.site-nav')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(page.getByRole('link', { name: /explore the work/i })).toBeVisible();
+    await expect(page.locator('.hero-links').getByRole('link', { name: /GitHub/i })).toBeVisible();
   }
 });
 
@@ -54,7 +54,7 @@ test('homepage enhancement loads locally and reading pages need no JavaScript', 
   await expect(scripts).toHaveCount(1);
   expect(await scripts.first().getAttribute('src')).toMatch(/^\/assets\/.*\.js$/);
   expect(requests.every(url => url.startsWith('http://127.0.0.1:4173/'))).toBe(true);
-  for (const route of ['/work/', '/writing/', '/about/', '/resume/']) {
+  for (const route of ['/about/', '/resume/']) {
     await page.goto(route);
     await expect(page.locator('script')).toHaveCount(0);
   }
@@ -71,56 +71,30 @@ test.describe('without JavaScript', () => {
     await expect(page.locator('.brand-name')).toBeVisible();
     await expect(page.locator('#brand-canvas')).toBeHidden();
     await expect(page.locator('h1')).toBeVisible();
-    await page.locator('.site-nav').getByRole('link', { name: 'Work', exact: true }).click();
-    await expect(page).toHaveURL(/\/work\/$/);
+    await page.locator('.site-nav').getByRole('link', { name: 'About', exact: true }).click();
+    await expect(page).toHaveURL(/\/about\/$/);
     await expect(page.locator('h1')).toBeVisible();
   });
 });
 
 
-for (const route of ['/', '/work/']) {
-  test(`${route} work rows navigate from their arrows, descriptions, and keyboard`, async ({ page }, testInfo) => {
+test('withdrawn work and writing routes are unavailable and have no public links', async ({ page }) => {
+  for (const route of ['/', '/about/', '/resume/', '/404.html']) {
     await page.goto(route);
-    const rows = page.locator('a.work-item');
-    await expect(rows).toHaveCount(3);
-    const destinations = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('href')));
-    for (let index = 0; index < destinations.length; index++) {
-      const destination = destinations[index];
-      expect(destination).toMatch(/^\/work\/[a-z-]+\/$/);
-      for (const target of ['arrow', 'description', 'keyboard']) {
-        await page.goto(route);
-        const row = page.locator('a.work-item').nth(index);
-        await expect(row.locator('a')).toHaveCount(0);
-        const title = await row.locator('.work-title').innerText();
-        await expect(row).toHaveAccessibleName(title);
-        if (target === 'keyboard') {
-          await row.focus();
-          await expect(row).toBeFocused();
-          await page.keyboard.press('Enter');
-        } else {
-          const part = row.locator(target === 'arrow' ? '.arrow' : '.work-description');
-          await part.scrollIntoViewIfNeeded();
-          const bounds = await part.boundingBox();
-          expect(bounds).toBeTruthy();
-          const x = bounds.x + bounds.width / 2;
-          const y = bounds.y + bounds.height / 2;
-          if (testInfo.project.name === 'mobile') await page.touchscreen.tap(x, y);
-          else await page.mouse.click(x, y);
-        }
-        await expect(page).toHaveURL(`http://127.0.0.1:4173${destination}`);
-        await expect(page.locator('h1')).toHaveText(title);
-      }
-    }
-  });
-}
-
+    await expect(page.locator('a[href^="/work/"], a[href^="/writing/"], a[href^="/docs/blog/"]')).toHaveCount(0);
+    await expect(page.locator('.site-nav a')).toHaveText(['About', 'Résumé']);
+  }
+  for (const route of ['/work/', '/writing/', '/work/production-ai-evaluation/', '/work/on-device-predictive-ml/', '/work/statistical-decision-systems/', '/docs/blog/', '/docs/blog/index.html', '/docs/blog/bi-directional-taxonomies.html']) {
+    expect((await page.request.get(route)).status()).toBe(404);
+  }
+});
 
 const fieldMetrics = page => page.evaluate(() => {
   const art = document.querySelector('.field-art').getBoundingClientRect();
   const hero = document.querySelector('.lab-hero').getBoundingClientRect();
   const header = document.querySelector('.site-header').getBoundingClientRect();
   const start = Math.max(0, art.bottom + scrollY - innerHeight + 24);
-  const end = Math.max(start + 1, hero.bottom + scrollY - header.height);
+  const end = Math.max(start + 1, Math.min(hero.bottom + scrollY - header.height, document.documentElement.scrollHeight - innerHeight));
   return { start, end };
 });
 const progress = page => page.locator('.field-stage').getAttribute('data-field-progress').then(Number);
@@ -141,8 +115,12 @@ async function readyField(page) {
   await expect(page.locator('.field-stage')).toHaveAttribute('data-field-ready', 'true');
 }
 async function nativeScroll(page, y) {
-  await page.evaluate(top => scrollTo({ top, behavior: 'instant' }), y);
-  await expect.poll(() => page.evaluate(target => Math.abs(scrollY - target), y)).toBeLessThanOrEqual(1);
+  const target = await page.evaluate(top => {
+    const target = Math.max(0, Math.min(top, document.documentElement.scrollHeight - innerHeight));
+    scrollTo({ top: target, behavior: 'instant' });
+    return target;
+  }, y);
+  await expect.poll(() => page.evaluate(target => Math.abs(scrollY - target), target)).toBeLessThanOrEqual(1);
   const { start, end } = await fieldMetrics(page);
   const expected = await page.evaluate(({ start, end }) => Math.max(0, Math.min(1, (scrollY - start) / (end - start))), { start, end });
   await expect.poll(() => progress(page)).toBeGreaterThanOrEqual(expected - .002);
@@ -246,7 +224,7 @@ test('scroll morph reverses deterministically and docks a tappable native brand'
 
 test('direct anchors, reload restoration, and resized layouts recompute docking', async ({ page }) => {
   await readyField(page);
-  await page.goto('/#selected-work');
+  await page.goto('/#background');
   await page.evaluate(() => document.fonts.ready);
   await expect.poll(() => progress(page)).toBeGreaterThan(.95);
   await expect.poll(() => opacity(page.locator('.brand-dock'))).toBeGreaterThan(.95);

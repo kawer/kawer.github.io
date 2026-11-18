@@ -1,7 +1,7 @@
 ---
 title: Statistical & decision systems
 description: A brief public overview of forecasting and engineering decision systems at fleet scale.
-status: published
+status: draft
 date: 2026-11-13
 source: https://kawer.dev/docs/Lazaro_Kawer_Resume.pdf
 tags: [Statistics, Systems]

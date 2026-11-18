@@ -4,6 +4,8 @@ Reviewed against the public website and `docs/Lazaro_Kawer_Resume.pdf` on 13 Nov
 
 ## Public content
 
+As of 18 November 2026, only Home, About, and Résumé are public. Engineering Work and Writing were withdrawn at the owner's request. The build does not load their collections or generate indexes, articles, or legacy blog notices. All three former work overviews are drafts. The descriptions below record their original provenance, not current publication approval.
+
 - `content/profile.json`: name, current public title, employment history, broad technical scope, education, and profile URLs come from the existing website and public résumé. Experience periods describe tenure; the Microsoft summary separately identifies the role progression.
 - `content/work/production-ai-evaluation.md`: broad evaluation and agent-workflow scope only, sourced to the public résumé.
 - `content/work/on-device-predictive-ml.md`: broad predictive-ML scope only; explicitly preserves the internal-only deployment boundary. Makes no claim about model training or a retail release.
@@ -17,11 +19,13 @@ Files with `status: draft` are editorial sources only. The build must exclude th
 
 Three technical case-study outlines contain the requested sections and remain unpublished until supporting detail is approved. The writing section has an editorial outline and a review stub for the existing taxonomy essay; neither is a published article.
 
-The original taxonomy essay contains production-system claims and an explicit confidentiality note. Retain its source in git history, but do not copy the old blog directory into the build output. Preserve the old URL with a safe notice pointing readers to Writing. Do not imply that the essay passed a new disclosure review.
+The original taxonomy essay contains production-system claims and an explicit confidentiality note. Retain its source in git history, but do not copy the old blog directory into the build output. Its old URL now returns 404. Do not imply that the essay passed a new disclosure review.
 
 ## Publication gate
 
 Before changing a draft to `published`:
+
+Work and Writing are disabled in the build. Restoring either section also requires the owner's direction on content and an explicit routing/navigation change; metadata alone must not republish it.
 
 1. Verify every technical and biographical claim against an identified source.
 2. Confirm permission to disclose employer details independently of their appearance in the résumé or old website.

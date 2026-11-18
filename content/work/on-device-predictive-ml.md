@@ -1,7 +1,7 @@
 ---
 title: On-device predictive machine learning
 description: A brief public overview of predictive ML work for Windows.
-status: published
+status: draft
 date: 2026-11-13
 source: https://kawer.dev/docs/Lazaro_Kawer_Resume.pdf
 tags: [On-device ML, Prediction]
