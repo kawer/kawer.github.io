@@ -1,5 +1,11 @@
 # Validation
 
+## Copy and layout cleanup, 18 November 2026
+
+`npm run check` passes, including ten Node tests. All 50 desktop/mobile Chromium cases pass, with zero violations across 30 axe scans. New assertions reject public editorial/status boilerplate and check that article introductions flow directly into the aligned reading column without large intervening gaps. Existing checks preserve internal-build scope, exact metrics, résumé bytes, links, responsive layouts, script-free reading pages, and the scroll identity.
+
+Desktop/mobile screenshots in `/workspace/artifacts/copy-layout` were visually reviewed for About and the flagship case study. The narrowed label columns, centered article, removed status block, and smaller section gaps reduce empty space without adding filler content. Legacy blog routes show real writing entries and no review notice. Earlier results below describe prior releases.
+
 ## Profile rewrite release candidate, 18 November 2026
 
 The isolated private preview builds successfully and passes linting, JavaScript type checking, the route/publication/math/geometry Node checks, and all 48 desktop/mobile Chromium cases. Thirty axe scans report zero violations. Case-study routes, native complete-row links, responsive summaries, new notes with mathematical notation, the existing scroll identity, and reduced-motion/no-JavaScript fallbacks are covered. Independent content review checked metric denominators, attribution, and ongoing-work status; corrections avoid implying an unsupported connection between separate statistical and decision-software projects.

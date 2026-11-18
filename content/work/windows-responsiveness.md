@@ -8,13 +8,13 @@ featured: true
 topic: "Measurement"
 role: "Created the metric and foundational system; technical lead"
 scope: "Windows responsiveness measurement and reduction"
-projectStatus: "Metric in organizational use; reduction work ongoing"
+projectStatus: "Metric in organizational use"
 outcome: "A perceptual metric, sampled telemetry, and validation in controlled and field studies."
 ---
 
 Windows performance has many technical measurements. The harder question is whether those measurements describe what a person experiences while using the machine. A system can look acceptable through an individual counter and still feel sluggish.
 
-I created Glitchiness to give Windows engineering a measurement of that experience. The work began with identifying observable manifestations of sluggishness and ended with an OS-wide telemetry and validation system used to set performance priorities. I now lead the ongoing program to expand its signals and reduce the behaviors it measures.
+I created Glitchiness to give Windows engineering a measurement of that experience. The work began with identifying observable manifestations of sluggishness and ended with an OS-wide telemetry and validation system used to set performance priorities. I lead the program that expands its signals and targets the behaviors it measures.
 
 ## Starting with the experience
 
@@ -38,7 +38,7 @@ The pipeline connects observations at several levels:
 
 I built the foundational telemetry, state models, composite metric, and sampled collection pipeline. Combining the signals required a modeling process that accounted for their relationship to experience.
 
-The score has to remain interpretable enough to guide engineering work. A composite that moves without helping engineers locate the underlying behavior would provide limited direction for a reduction program. The ongoing work therefore includes expanding the detected signals as well as reducing the measured problems.
+The score has to remain interpretable enough to guide engineering work. A composite that moves without helping engineers locate the underlying behavior would provide limited direction for a reduction program. The reduction program connects the detected signals to the behaviors engineers need to investigate.
 
 A composite gives teams a shared measurement, but it also compresses different behaviors into one value. Investigating the underlying signals remains necessary when deciding what to fix. The measurement pipeline and the engineering investigation therefore have to work together.
 
@@ -48,7 +48,7 @@ Validation used both controlled and field studies. I worked alongside HCI and UX
 
 These settings answer different questions. In-person sessions connect the measurement to experiences that researchers can directly observe. Device-population experiments test its behavior in a broader operating environment. On-device state-model validation checks the extraction layer beneath both.
 
-The metric covers the responsiveness behaviors its signals capture. Validation in controlled and field settings connects those signals to experience, while coverage remains a continuing engineering concern.
+The metric covers the responsiveness behaviors its signals capture. Validation in controlled and field settings connects those signals to experience.
 
 ## From a metric to an engineering program
 
@@ -56,12 +56,8 @@ Glitchiness became an operational metric for Windows performance priorities. The
 
 I created the original system before the team expanded. I now technically lead six engineers working on signal growth and the reduction program.
 
-The production measurement system and the ongoing reduction effort have different statuses. The former is in organizational use. The latter continues. The current program expands the measurement and targets the underlying behaviors.
+## Lessons from the measurement system
 
-## Limits and lessons
-
-Glitchiness measures a particular class of Windows experience. Its interpretation depends on the signals it captures and the evidence connecting those signals to people. It does not represent every aspect of user experience.
+Glitchiness measures Windows responsiveness through the behaviors its signals capture. Its interpretation depends on those signals and the evidence connecting them to people.
 
 The central engineering lesson was to validate the links in the measurement chain separately: what the detector sees, what the composite expresses, and how both relate to observed experience. Operational adoption makes that discipline more consequential because the metric starts influencing which problems engineers work on.
-
-The next phase is to expand coverage and reduce the underlying behaviors while preserving the connection between system activity and experience.

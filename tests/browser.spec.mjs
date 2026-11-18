@@ -49,6 +49,31 @@ test('homepage remains usable at narrow, tablet, and laptop widths', async ({ pa
   }
 });
 
+test('reading pages use compact sections and an aligned article column', async ({ page }) => {
+  await page.goto('/work/production-ai-evaluation/');
+  const article = page.locator('.article-reading');
+  await expect(article).toBeVisible();
+  await expect(page.locator('.case-summary')).toHaveCount(0);
+  const bounds = await article.evaluate(element => {
+    const heading = element.querySelector('.page-heading').getBoundingClientRect();
+    const lede = element.querySelector('.lede').getBoundingClientRect();
+    const prose = element.querySelector('article').getBoundingClientRect();
+    return { headingLeft: heading.left, proseLeft: prose.left, gap: prose.top - lede.bottom, width: prose.width };
+  });
+  expect(Math.abs(bounds.headingLeft - bounds.proseLeft)).toBeLessThan(2);
+  expect(bounds.gap).toBeLessThanOrEqual(36);
+  expect(bounds.width).toBeLessThanOrEqual(780);
+  for (const route of ['/about/', '/resume/', '/work/', '/writing/']) {
+    await page.goto(route);
+    const gap = await page.evaluate(() => {
+      const heading = document.querySelector('.page-heading').getBoundingClientRect();
+      const section = document.querySelector('.section').getBoundingClientRect();
+      return section.top - heading.bottom;
+    });
+    expect(gap).toBeLessThanOrEqual(24);
+  }
+});
+
 test('homepage enhancement loads locally and reading pages need no JavaScript', async ({ page }) => {
   const requests = [];
   page.on('request', request => requests.push(request.url()));

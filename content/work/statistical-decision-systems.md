@@ -14,9 +14,9 @@ featured: false
 
 I built forecasting and regression-attribution systems used for Windows quality tracking. The work covered population-scale regression attribution and separate device-population and sales forecasting, in partnership with sales and marketing.
 
-Those tasks ask different questions. A population forecast estimates the future shape of the device population. Regression attribution investigates where a quality change came from. A useful result in one task does not validate the other.
+Those tasks ask different questions. A population forecast estimates the future shape of the device population. Regression attribution investigates where a quality change came from. Each needs an evaluation matched to the question it answers.
 
-Device-population forecasts backtested at R² = 0.90 across active silicon. That statistic belongs to the population forecasts. It is not an accuracy percentage or a result for every forecasting and attribution model in the program.
+Device-population forecasts backtested at R² = 0.90 across active silicon.
 
 ## Making performance evidence usable
 
@@ -24,15 +24,11 @@ I also built a performance decision platform for release decisions and next-gene
 
 The platform replaced weeks of status reviews with automated analysis. Normalization and ranked results gave the decision workflow a shared representation of the evidence it needed to inspect.
 
-The engineering work included the platform's own reliability. Platform-caused failures fell from approximately two per day to effectively none. That result concerns failures caused by the decision software, rather than Windows crashes in general; it is not an exact-zero uptime guarantee.
+The engineering work included the platform's own reliability. Failures caused by the decision software fell from approximately two per day to effectively none.
 
 ## Interpreting the results
 
 A forecasting statistic, an attribution result, and a ranked release blocker serve different decisions. Their scope needs to survive the trip from a model or data pipeline into a user interface.
-
-The same applies to the operational measurements. Reducing failures in decision software makes the workflow more dependable, but it does not establish that every forecast is correct or that every release decision has a measured causal benefit.
-
-I built statistical systems for quality tracking and decision software for performance review. The project outcomes here describe those systems and their stated uses. They do not imply sole ownership of Windows release decisions or the underlying partner data.
 
 ## Earlier systems work
 
