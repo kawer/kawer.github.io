@@ -2,7 +2,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { renderFieldSvg } from './field-svg.mjs';
 import { loadCollection, markdown } from './content.mjs';
-import { renderPage, renderHome, renderAbout, renderResume, renderListing, renderArticle, render404 } from './templates.mjs';
+import { renderHome, renderAbout, renderResume, renderListing, renderArticle, render404 } from './templates.mjs';
 
 const root = process.cwd();
 const output = join(root, 'dist');
@@ -38,10 +38,10 @@ for (const [kind, items] of collections) {
 }
 await writeRoute('/404.html', render404(), false);
 
-// Legacy URLs stay navigable without republishing material pending disclosure review.
+// Old article URLs show the current notes without republishing the withheld essay.
 for (const path of ['/docs/blog/', '/docs/blog/index.html', '/docs/blog/bi-directional-taxonomies.html']) {
-  const html = renderPage({ title: 'Writing archive', description: 'The writing archive has moved.', path, section: 'writing', body: '<section class="page-heading"><p class="eyebrow">Writing archive</p><h1 class="page-title">This article is under review.</h1><p>The archive is being reviewed before republication. Browse the current writing section for available notes.</p><a class="text-link" href="/writing/">Go to writing →</a></section>' });
-  await writeRoute(path, html.replace('</head>', '<meta name="robots" content="noindex,follow"></head>'), false);
+  const html = renderListing('writing', writing).replace('</head>', '<meta name="robots" content="noindex,follow"></head>');
+  await writeRoute(path, html, false);
 }
 
 // This allowlist is the deployment boundary. Never copy the repository or content tree.

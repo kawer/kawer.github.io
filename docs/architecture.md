@@ -1,5 +1,13 @@
 # Architecture and review decisions
 
+## Copy and reading layout cleanup, 18 November 2026
+
+Public pages no longer describe résumé provenance, editorial completeness, withheld material, or unfinished model-training directions. Case-study status panels are removed. Existing result names, denominators, contribution boundaries, and internal Windows deployment scope remain in the narrative. Omitting future work does not promote it to an accomplishment. Disclosure review remains a source-document workflow rather than website copy.
+
+Reading pages use a 1060px content area with a centered 780px article column, smaller headings and section gaps, and compact back links. About and Résumé use a narrow section-label column rather than reserving half the layout for labels, stacking on smaller screens. Homepage background and writing sections use narrower labels and reduced padding. Native navigation, the artwork geometry, and its scroll behavior remain unchanged.
+
+Legacy blog URLs render the actual current Writing index, with its canonical URL and noindex metadata. The original essay remains excluded; no review notice or placeholder is shown. Earlier sections below record the prior release decisions.
+
 ## Profile rewrite, 18 November 2026
 
 The owner supplied a new factual briefing, canceled the proposed removal of Work and Writing, and approved the displayed replacement preview for publication and release. The removal PR was closed without merging. Shared templates support two featured case studies, role/scope/status summaries, supporting projects, and dated engineering notes. A compatibility fallback keeps entries without featured metadata usable. The Markdown loader remains the publication boundary.

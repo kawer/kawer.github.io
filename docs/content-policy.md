@@ -21,7 +21,9 @@ Case-study dates record preparation for this redesign, not project launch dates.
 
 Files with `status: draft` generate no HTML, listing item, sitemap entry, copied asset, or feed. A noindex page is insufficient: draft bodies must not exist in deployment output. The earlier case-study outlines and taxonomy essay review stub remain drafts.
 
-The original taxonomy essay remains withheld. Its legacy URL renders a safe review notice linking to Writing; it does not republish the source or imply disclosure approval.
+The original taxonomy essay remains withheld. Its legacy URL renders the current Writing index with canonical and noindex metadata. It does not republish the source or show an editorial review notice.
+
+Public copy does not narrate its sourcing, editorial review, omissions, or unfinished projects. Keep that material in source documentation. Preserve necessary technical context in affirmative descriptions, including internal-build deployment and exact metric scope. Remove future-work sections rather than recasting them as completed results.
 
 ## Future publication gate
 

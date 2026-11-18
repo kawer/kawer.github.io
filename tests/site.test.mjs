@@ -72,7 +72,8 @@ test('unpublished content and repository internals cannot enter deployment', asy
     }
   }
   const legacy = await readFile(join(root, 'docs/blog/bi-directional-taxonomies.html'), 'utf8');
-  assert.match(legacy, /under review/);
+  assert.match(legacy, /<h1[^>]*>Writing<\/h1>/);
+  assert.match(legacy, /\/writing\/evaluating-proposed-code-changes\//);
   assert.match(legacy, /noindex/);
 });
 
@@ -94,7 +95,7 @@ test('engineering notes have current metadata and accessible mathematical notati
   assert.match(note, /katex.min.css/);
 });
 
-test('flagship case studies and new notes retain attribution, status, and metric scope', async () => {
+test('flagship case studies and new notes retain attribution and metric scope', async () => {
   const home = await readFile(join(root, 'index.html'), 'utf8');
   assert.match(home, /work\/windows-responsiveness\//);
   assert.match(home, /work\/production-ai-evaluation\//);
@@ -103,12 +104,12 @@ test('flagship case studies and new notes retain attribution, status, and metric
   assert.match(evaluation, /evaluation vertical within a broader/);
   assert.match(evaluation, /54% to 78% after/);
   assert.match(evaluation, /18%/);
-  assert.match(evaluation, /research in progress/);
+  assert.doesNotMatch(evaluation, /research in progress|fine-tuning agent models|What is operating/);
   assert.doesNotMatch(evaluation, /18 percentage points|model accuracy rose|tens of millions/);
   const onDevice = await readFile(join(root, 'work/on-device-predictive-ml/index.html'), 'utf8');
   assert.match(onDevice, /71% of targeted failures at least 20 seconds/);
   assert.match(onDevice, /92% at least five seconds/);
-  assert.match(onDevice, /internal builds/i);
+  assert.match(onDevice, /internal (?:Windows )?builds/i);
   assert.doesNotMatch(onDevice, /71% accuracy|92% accuracy/);
   const writing = await readFile(join(root, 'writing/index.html'), 'utf8');
   assert.match(writing, /Technical note/);
@@ -116,6 +117,14 @@ test('flagship case studies and new notes retain attribution, status, and metric
   const note = await readFile(join(root, 'writing/evaluating-proposed-code-changes/index.html'), 'utf8');
   assert.match(note, /<math/);
   assert.match(note, /katex.min.css/);
+});
+
+test('public pages contain the work without editorial review or status boilerplate', async () => {
+  for (const file of htmlFiles) {
+    const html = await readFile(file, 'utf8');
+    assert.doesNotMatch(html, /Background summarized from|Technical descriptions are limited|This page is an accessible summary|existing résumé, unchanged|article is under review|No notes have been published yet|Publication boundary|pending disclosure|different statuses|The latter continues|not an accuracy percentage|not an exact-zero uptime|They do not imply sole ownership/i, relative(root, file));
+    assert.doesNotMatch(html, /class="case-summary"|<dt>Status<\/dt>/);
+  }
 });
 
 

@@ -7,7 +7,7 @@ featured: true
 topic: "AI evaluation"
 role: "Architect, foundational implementation, and evaluation technical lead"
 scope: "Evaluation within a broader OS agent engineering initiative"
-projectStatus: "Operating infrastructure; model-training research ongoing"
+projectStatus: "Operating evaluation infrastructure"
 outcome: "Developer fix acceptance rose from 54% to 78% after framework introduction."
 ---
 
@@ -37,13 +37,13 @@ Aggregate scoring combines structural failures, domain quality, disagreement, an
 
 Developer outcomes provide another source of evidence. Filed bugs, acceptance decisions, rejection reasons, and review conversations help identify gaps in the rubric and judge calibration.
 
-A rejected fix is not automatically a wrong fix. Feasibility, kernel constraints, and engineering priority can affect the decision. Treating every rejection as a correctness label would teach the evaluation system to collapse several different questions into one score.
+Developer decisions reflect feasibility, kernel constraints, and engineering priority alongside correctness. Calibration has to distinguish those reasons when interpreting a rejection.
 
 ## Revision with a regression check
 
 The evaluation system also supplies feedback for revising agent workflows. A completed attempt receives a score and diagnostic feedback. Another model or interpreter examines what was missing, such as an omitted repository lookup or the original allocation point behind a recursive memory stack, and proposes changes to prompting, trace context, or tool use.
 
-A completed agent session cannot be resumed in this workflow. The next attempt starts fresh with the original inputs and corrective context. We rerun the failing case and the prior reference corpus, then have a domain expert approve changes before adoption.
+Each revision starts a fresh attempt with the original inputs and corrective context. We rerun the failing case and the prior reference corpus, then have a domain expert approve changes before adoption.
 
 That wider rerun matters because a change that repairs a single failure can regress cases the harness already handled. The operating loop revises the harness or its inputs under human review.
 
@@ -51,7 +51,7 @@ That wider rerun matters because a change that repairs a single failure can regr
 
 I led a comparison of six model configurations using paired non-inferiority gates, predeclared quality criteria, source-grounded judgments, and controls for model-family bias. Only one candidate passed every predeclared quality gate.
 
-Developer fix acceptance improved by 18% with the production model change. In a separate comparison, acceptance rose from 54% to 78% after the evaluation framework was introduced. That before-and-after result measures a change in developer outcomes; it does not isolate evaluation as the sole cause.
+Developer fix acceptance improved by 18% with the production model change. In a separate comparison, acceptance rose from 54% to 78% after the evaluation framework was introduced.
 
 The self-service harness also shortened prompt and evaluation iteration from more than two weeks to one to two days. Vertical owners could compare prompts, tool access, context, and workflows with the same grounded quality framework.
 
@@ -67,10 +67,8 @@ Confidence intervals, significance testing, minimum improvement thresholds, and 
 
 The decision remains multiobjective. A change that addresses severe P99 failures or closes a memory leak may justify a modest deterioration in another percentile. An isolated numerical improvement is insufficient if it violates a workload's regression constraints.
 
-When a change fails empirical validation or produces an unexpected outcome, the observed results return to the optimization evaluation loop. A domain-specific judge and human experts examine them and guide the next iteration. Human experts remain part of the review process.
+When a change fails empirical validation or produces an unexpected outcome, the observed results return to the optimization evaluation loop. A domain-specific judge and human experts examine them and guide the next iteration.
 
-## What is operating, and what is still in progress
-
-The evaluation infrastructure, self-service experiments, model-selection work, and reviewed revision loop are operating work. I am now working on fine-tuning agent models with evaluation and reward signals, and on a smaller specialized guidance model. Both are research in progress.
+## Lessons from the evaluation system
 
 The broader lesson is that an evaluation stack needs several kinds of evidence. Structural gates, expert criteria, source context, developer decisions, and measured system behavior each reveal failures the others can miss. The engineering work is in making those differences inspectable and preserving the point at which measured behavior can veto a plausible answer.

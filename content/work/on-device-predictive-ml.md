@@ -16,20 +16,18 @@ I built and internally deployed an on-device small language model to predict imm
 
 The deployment covered approximately 3,000 internal Windows devices. It predicted 71% of targeted failures at least 20 seconds ahead and 92% at least five seconds ahead. Scheduler interventions mitigated approximately 16% of targeted failures before onset.
 
-These are different measurements. The prediction figures describe coverage at two lead-time thresholds. The intervention result describes failures mitigated before they began. Neither should be read as a claim about all Windows failures or a retail deployment.
+The prediction figures describe coverage of targeted failures at two lead-time thresholds. The intervention result measures targeted failures mitigated before they began.
 
 ## Evaluating an intervention
 
 Lead time matters because the system needs time to take a useful action. A prediction that arrives too late can identify the right failure without preventing its effect on the user.
 
-Prediction coverage and intervention benefit also need separate evaluation. The coverage figures do not establish a false-positive rate, and the mitigation result does not establish the cost of every intervention. Both matter when deciding whether an intervention should be used more broadly.
+Prediction coverage, false-positive rate, intervention benefit, and intervention cost answer different evaluation questions. Together, they determine whether the system gives the scheduler a useful opportunity to act.
 
 The model ran on internal Windows builds.
 
 ## Distributed evaluation of Windows AI features
 
 In a separate project, I owned a distributed evaluation platform for eight AI-powered Windows features. Evaluation ran across approximately 11,000 internal devices and hundreds of lab machines, catching three critical regressions before retail release.
-
-The internal-device population and lab machines belong to this feature-evaluation program. They are separate from the on-device prediction cohort above.
 
 These projects required different kinds of evidence: prediction lead time and successful intervention for the on-device system, and regression detection before release for the distributed evaluation program.
