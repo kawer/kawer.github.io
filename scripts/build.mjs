@@ -10,7 +10,8 @@ const profile = JSON.parse(await readFile(join(root, 'content/profile.json'), 'u
 const work = await loadCollection('work');
 // Curate the homepage and Work index independently of preparation dates.
 const workOrder = profile.selectedWork.map(item => item.slug);
-work.sort((a, b) => workOrder.indexOf(a.slug) - workOrder.indexOf(b.slug));
+const order = item => { const index = workOrder.indexOf(item.slug); return index === -1 ? workOrder.length : index; };
+work.sort((a, b) => order(a) - order(b));
 const writing = await loadCollection('writing');
 const data = { ...profile, work, writing };
 const routes = [];

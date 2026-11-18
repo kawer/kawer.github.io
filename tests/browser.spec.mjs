@@ -2,8 +2,12 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { loadCollection } from '../scripts/content.mjs';
 
-const pages = ['/', '/work/', '/writing/', '/about/', '/resume/', '/work/production-ai-evaluation/', '/work/on-device-predictive-ml/', '/work/statistical-decision-systems/', '/docs/blog/bi-directional-taxonomies.html', '/404.html'];
+const work = await loadCollection('work');
+const writing = await loadCollection('writing');
+const featuredCount = work.filter(item=>item.featured).length || work.length;
+const pages = ['/', '/work/', '/writing/', '/about/', '/resume/', ...work.map(item=>item.url), ...writing.map(item=>item.url), '/docs/blog/bi-directional-taxonomies.html', '/404.html'];
 for (const route of pages) {
   test(`${route} renders accessibly without horizontal overflow`, async ({ page }, testInfo) => {
     const errors = [];
@@ -82,7 +86,7 @@ for (const route of ['/', '/work/']) {
   test(`${route} work rows navigate from their arrows, descriptions, and keyboard`, async ({ page }, testInfo) => {
     await page.goto(route);
     const rows = page.locator('a.work-item');
-    await expect(rows).toHaveCount(3);
+    await expect(rows).toHaveCount(route === '/' ? featuredCount : work.length);
     const destinations = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('href')));
     for (let index = 0; index < destinations.length; index++) {
       const destination = destinations[index];

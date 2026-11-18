@@ -1,5 +1,13 @@
 # Validation
 
+## Profile rewrite release candidate, 18 November 2026
+
+The isolated private preview builds successfully and passes linting, JavaScript type checking, the route/publication/math/geometry Node checks, and all 48 desktop/mobile Chromium cases. Thirty axe scans report zero violations. Case-study routes, native complete-row links, responsive summaries, new notes with mathematical notation, the existing scroll identity, and reduced-motion/no-JavaScript fallbacks are covered. Independent content review checked metric denominators, attribution, and ongoing-work status; corrections avoid implying an unsupported connection between separate statistical and decision-software projects.
+
+The local content-review interface also passes navigation, math visibility, static home rendering, and width checks at 320, 736, and 1024 pixels without network requests or runtime errors. The owner approved the displayed candidate for publication and release. The four reviewed cases and matching profile are promoted without changes to their content. The original briefing, excluded details, and claim-review ledger remain private. The root build is validated again before release; the earlier full-release results below describe the initial version.
+
+Final root validation passes: `npm run check` (lint, type check, build, nine Node tests) and all 48 desktop/mobile browser cases, with zero violations across 30 axe scans. Seven content files match the reviewed preview byte-for-byte. Release screenshots are captured under the ignored review-artifact directory. No dependency or deployment-workflow changes are part of this release.
+
 Reviewed 16 November 2026 against the control-free scroll-morph design. No production deployment or merge was performed.
 
 ## Automated checks
