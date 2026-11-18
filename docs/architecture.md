@@ -1,5 +1,13 @@
 # Architecture and review decisions
 
+## Profile rewrite, 18 November 2026
+
+The owner supplied a new factual briefing, canceled the proposed removal of Work and Writing, and approved the displayed replacement preview for publication and release. The removal PR was closed without merging. Shared templates support two featured case studies, role/scope/status summaries, supporting projects, and dated engineering notes. A compatibility fallback keeps entries without featured metadata usable. The Markdown loader remains the publication boundary.
+
+Only the four reviewed case studies and matching profile were promoted into public content. The numerical claim/disclosure table, original briefing, excluded material, and local preview remain private. The preview builds in a separate source/output tree beneath `.private/`; it does not overwrite production `dist/`. Local preview output receives noindex metadata and a disallowing robots file. Public deployment uploads only the root build output after a reviewed master change.
+
+The two new general technical notes discuss evaluation and measurement methodology without employer-specific implementation claims. They are newly prepared site content, not evidence of an existing academic publication record.
+
 ## Existing project
 
 The source repository was a plain HTML/CSS GitHub Pages site using HTML5 UP Aerial. It had a single landing page, bundled icon fonts, decorative background layers, inline touch/scroll handlers, two résumé PDFs, and a separate HTML blog. There was no package manager, build pipeline, automated linting, type checking, or browser test suite. The deployment workflow uploaded the entire repository. The landing page disabled mobile zoom and touch scrolling; it had limited metadata and icon-only navigation.

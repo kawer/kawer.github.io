@@ -85,6 +85,40 @@ test('résumé bytes and custom-domain deployment files are preserved', async ()
   for (const route of ['', 'work/', 'writing/', 'about/', 'resume/']) assert.ok(sitemap.includes(`https://kawer.dev/${route}<`));
 });
 
+test('engineering notes have current metadata and accessible mathematical notation', async () => {
+  const writing = await readFile(join(root, 'writing/index.html'), 'utf8');
+  assert.match(writing, /Technical note/);
+  assert.doesNotMatch(writing, /peer-reviewed|Articles are in preparation|Published research/);
+  const note = await readFile(join(root, 'writing/evaluating-proposed-code-changes/index.html'), 'utf8');
+  assert.match(note, /<math/);
+  assert.match(note, /katex.min.css/);
+});
+
+test('flagship case studies and new notes retain attribution, status, and metric scope', async () => {
+  const home = await readFile(join(root, 'index.html'), 'utf8');
+  assert.match(home, /work\/windows-responsiveness\//);
+  assert.match(home, /work\/production-ai-evaluation\//);
+  assert.equal((home.match(/class="work-item"/g) || []).length, 2);
+  const evaluation = await readFile(join(root, 'work/production-ai-evaluation/index.html'), 'utf8');
+  assert.match(evaluation, /evaluation vertical within a broader/);
+  assert.match(evaluation, /54% to 78% after/);
+  assert.match(evaluation, /18%/);
+  assert.match(evaluation, /research in progress/);
+  assert.doesNotMatch(evaluation, /18 percentage points|model accuracy rose|tens of millions/);
+  const onDevice = await readFile(join(root, 'work/on-device-predictive-ml/index.html'), 'utf8');
+  assert.match(onDevice, /71% of targeted failures at least 20 seconds/);
+  assert.match(onDevice, /92% at least five seconds/);
+  assert.match(onDevice, /internal builds/i);
+  assert.doesNotMatch(onDevice, /71% accuracy|92% accuracy/);
+  const writing = await readFile(join(root, 'writing/index.html'), 'utf8');
+  assert.match(writing, /Technical note/);
+  assert.doesNotMatch(writing, /peer-reviewed|Articles are in preparation|Published research/);
+  const note = await readFile(join(root, 'writing/evaluating-proposed-code-changes/index.html'), 'utf8');
+  assert.match(note, /<math/);
+  assert.match(note, /katex.min.css/);
+});
+
+
 test('editorial pipeline excludes draft bodies and renders safe code and mathematical notation', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'kawer-content-'));
   try {

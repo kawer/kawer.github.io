@@ -23,6 +23,10 @@ The browser tests start their own preview server. Screenshots and test reports a
 
 ## Content
 
+The owner approved the reviewed profile rewrite for publication and release on 18 November 2026. The site features two case studies, supporting on-device/statistical work, and two newly prepared engineering notes. The original briefing, claim-review ledger, excluded details, and local review output remain gitignored under `.private/`; approval applies to the displayed candidate, not every item in the briefing.
+
+Work frontmatter can include `featured`, `topic`, `outcome`, `role`, `scope`, and `projectStatus`. Featured entries appear on the homepage; other projects appear in the Work index. Existing entries without these fields remain compatible. Reading pages show role, scope, and status when supplied. Dates on new engineering notes record their preparation for this site, not a prior publication history.
+
 - `content/profile.json`: verified public biography and profile links.
 - `content/work/*.md`: engineering case studies.
 - `content/writing/*.md`: technical writing.
