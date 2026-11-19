@@ -1,5 +1,13 @@
 # Architecture and review decisions
 
+## Bounded canvas renderer, 19 November 2026
+
+Keep Canvas 2D and the original 8,910-particle artwork. Each morph frame now interpolates and projects into reusable numeric buffers and classifies depth once. Stable linked indices retain the same point order within each of the eight compositing bands. The completed lettering projection is reused while the mark travels. This removes two temporary point clouds and eight repeated depth-classification scans per frame without changing geometry, point density, or circle rendering.
+
+The moving canvas now covers the artwork instead of the viewport. A conservative perspective bound follows from the maximum endpoint radius: interpolation and rotation cannot increase that radius, and projection cannot exceed `radius / sqrt(1 - (radius / 3.8)^2)`. The canvas fits this bound plus dot padding, stays the same size between layout measurements, and moves on device-pixel boundaries. Its local coordinates preserve the original viewport-space positions. The native sticky header remains the docking target. Once the header handoff is opaque, the large canvas is hidden and no longer projected, cleared, or painted; reversing below that boundary restores it. Finite progress settling and reduced-motion behavior remain unchanged.
+
+WebAssembly would still need to submit the same Canvas drawing work. Reusing buffers and reducing the drawing surface address the measured costs without a new compiler toolchain, binary asset, rendering dependency, or browser requirement. `scripts/profile-orb.mjs` provides an optional local Chromium benchmark; it is neither production telemetry nor a CI timing gate. Earlier sections below describe previous releases.
+
 ## Desktop animation and Notes withdrawal, 19 November 2026
 
 The live 3840×2160 desktop page had only 636px of native scrolling against an 840px animation endpoint, so the orb could never finish docking. The endpoint now respects actual available scroll distance. The shorter page after Notes withdrawal uses the same rule. Native input remains untouched and no filler scroll space is added.

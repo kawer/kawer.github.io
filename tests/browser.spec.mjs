@@ -316,6 +316,35 @@ test('fast scroll jumps animate through intermediate shapes and dock on tall scr
   }
 });
 
+test('artwork uses a bounded surface and stops painting after the header handoff', async ({ page, isMobile }) => {
+  if (!isMobile) await page.setViewportSize({ width: 3840, height: 2160 });
+  await readyField(page);
+  const pixels = await page.locator('#field-canvas').evaluate(canvas => ({
+    actual: canvas.width*canvas.height,
+    viewport: innerWidth*innerHeight*Math.min(devicePixelRatio,2)**2,
+  }));
+  expect(pixels.actual).toBeLessThan(pixels.viewport*.6);
+  await page.evaluate(() => {
+    window.fieldClears = 0;
+    const clear = CanvasRenderingContext2D.prototype.clearRect;
+    CanvasRenderingContext2D.prototype.clearRect = function(...args) {
+      if (this.canvas.id === 'field-canvas') window.fieldClears++;
+      return clear.apply(this,args);
+    };
+  });
+  const { start, end } = await fieldMetrics(page);
+  await nativeScroll(page,start+(end-start)*.96);
+  await expect(page.locator('#field-canvas')).toBeHidden();
+  const clears = await page.evaluate(() => window.fieldClears);
+  await nativeScroll(page,start+(end-start)*.99);
+  expect(await page.evaluate(() => window.fieldClears)).toBe(clears);
+  await nativeScroll(page,start+(end-start)*.9);
+  await expect(page.locator('#field-canvas')).toBeVisible();
+  expect(await page.evaluate(() => window.fieldClears)).toBeGreaterThan(clears);
+  await nativeScroll(page,0);
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state','sphere');
+});
+
 test('older motion listeners and missing resize observer still animate and follow preferences', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

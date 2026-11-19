@@ -10,16 +10,25 @@ const dock = /** @type {HTMLElement | null} */ (document.querySelector('.brand-d
 const context = canvas?.getContext('2d'), miniContext = mini?.getContext('2d');
 if (canvas && mini && stage && art && hero && header && dock && context && miniContext) {
   const sphere = createSurface(), name = createNameSurface(sphere.length);
+  // Stable buffers keep the scroll path free of per-particle object allocation.
+  const projectedX = new Float64Array(sphere.length), projectedY = new Float64Array(sphere.length);
+  const next = new Int32Array(sphere.length), first = new Int32Array(8), last = new Int32Array(8);
+  // A convex morph and rotation cannot exceed either endpoint's radius. This
+  // perspective bound contains every intermediate shape, including its dots.
+  const radius = Math.max(...sphere.map(point=>Math.hypot(point.x,point.y,point.z)),...name.map(point=>Math.hypot(point.x,point.y,point.z)));
+  const projectedRadius = radius / Math.sqrt(1-(radius/3.8)**2);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let frame = 0, measureNeeded = true, docked = false;
   let visualProgress = 0, initialized = false, lastFrameTime = 0;
   let snapScrollY = null;
   let artX = 0, artY = 0, artSize = 0, start = 0, end = 1;
+  let targetX = 0, targetY = 0, targetScale = 1, canvasSize = 1, pixelRatio = 1;
+  let projectedMorph = -1;
   const clamp = value => Math.max(0,Math.min(1,value));
   const ease = value => { const t = clamp(value); return t*t*(3-2*t); };
 
   function fit(target, ctx, width, height) {
-    const ratio = Math.min(devicePixelRatio || 1,2);
+    const ratio = pixelRatio;
     const w = Math.round(width*ratio), h = Math.round(height*ratio);
     if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
     ctx.setTransform(ratio,0,0,ratio,0,0);
@@ -39,6 +48,39 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
       ctx.fill();
     }
   }
+  function project(morph) {
+    if (morph === projectedMorph) return;
+    const yaw = INITIAL_YAW*(1-morph), pitch = INITIAL_PITCH*(1-morph);
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    first.fill(-1); last.fill(-1);
+    for (let index=0;index<sphere.length;index++) {
+      const point = sphere[index], letter = name[index];
+      const px = point.x+(letter.x-point.x)*morph;
+      const py = point.y+(letter.y-point.y)*morph;
+      const pz = point.z+(letter.z-point.z)*morph;
+      const x = px*cy+pz*sy, z = -px*sy+pz*cy;
+      const y = py*cp-z*sp, depth = py*sp+z*cp;
+      const perspective = 3.8/(3.8-depth);
+      projectedX[index] = x*perspective; projectedY[index] = y*perspective;
+      const band = Math.max(0,Math.min(7,Math.floor((depth+1.12)/2.25*8)));
+      if (last[band] === -1) first[band] = index;
+      else next[last[band]] = index;
+      last[band] = index; next[index] = -1;
+    }
+    projectedMorph = morph;
+  }
+  function paintField(x, y, scale, radiusScale, opacity) {
+    for (let band=0;band<8;band++) {
+      context.fillStyle = `rgba(35,92,219,${(0.14+band*0.115)*opacity})`;
+      context.beginPath();
+      const radius = (0.6+band*0.13)*radiusScale;
+      for (let index=first[band];index!==-1;index=next[index]) {
+        const px = x+projectedX[index]*scale, py = y+projectedY[index]*scale;
+        context.moveTo(px+radius,py); context.arc(px,py,radius,0,Math.PI*2);
+      }
+      context.fill();
+    }
+  }
   function measure() {
     const rect = art.getBoundingClientRect();
     artX = rect.left+rect.width/2;
@@ -50,6 +92,11 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
     const scrollLimit = Math.max(0,document.documentElement.scrollHeight-window.innerHeight);
     end = Math.max(start+1,Math.min(heroEnd,scrollLimit));
     const target = dock.getBoundingClientRect();
+    targetX = target.left+target.width/2; targetY = target.top+target.height/2;
+    targetScale = target.width/2.9;
+    pixelRatio = Math.min(devicePixelRatio || 1,2);
+    canvasSize = Math.ceil(2*projectedRadius*Math.max(artSize*0.345,targetScale)+6);
+    canvas.style.width = `${canvasSize}px`; canvas.style.height = `${canvasSize}px`;
     fit(mini,miniContext,target.width,target.height);
     paint(miniContext,projectSurface(name,0,0),target.width/2,target.height/2,target.width/2.9,0.45);
     measureNeeded = false;
@@ -82,22 +129,25 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
       const progress = visualProgress;
       const settled = progress === targetProgress;
       if (docked && progress === 1 && !layoutChanged) return;
-      const target = dock.getBoundingClientRect();
       const morph = ease(progress/0.62);
       const travel = ease((progress-0.25)/0.75);
       const handoff = ease((progress-0.78)/0.17);
-      const points = sphere.map((point,index) => ({x:point.x+(name[index].x-point.x)*morph,y:point.y+(name[index].y-point.y)*morph,z:point.z+(name[index].z-point.z)*morph}));
-      const projected = projectSurface(points,INITIAL_YAW*(1-morph),INITIAL_PITCH*(1-morph));
-      const targetX = target.left+target.width/2, targetY = target.top+target.height/2;
       const originY = artY-Math.min(window.scrollY,start);
       const x = artX+(targetX-artX)*travel, y = originY+(targetY-originY)*travel;
-      const sourceScale = artSize*0.345, targetScale = target.width/2.9;
+      const sourceScale = artSize*0.345;
       const scale = sourceScale+(targetScale-sourceScale)*travel;
       const radiusScale = Math.max(0.6,artSize/900)*(1-travel)+0.45*travel;
-      fit(canvas,context,document.documentElement.clientWidth,window.innerHeight);
-      paint(context,projected,x,y,scale,radiusScale,1-handoff);
+      if (handoff < 1) {
+        project(morph);
+        // Align the smaller surface to device pixels, preserving dot sharpness.
+        const left = Math.floor((x-canvasSize/2)*pixelRatio)/pixelRatio;
+        const top = Math.floor((y-canvasSize/2)*pixelRatio)/pixelRatio;
+        canvas.style.transform = `translate(${left}px,${top}px)`;
+        fit(canvas,context,canvasSize,canvasSize);
+        paintField(x-left,y-top,scale,radiusScale,1-handoff);
+      }
       header.style.setProperty('--dock-opacity',String(handoff));
-      canvas.hidden = progress === 1; mini.hidden = false;
+      canvas.hidden = handoff === 1; mini.hidden = false;
       stage.dataset.fieldReady = 'true'; stage.dataset.fieldProgress = progress.toFixed(5);
       stage.dataset.fieldSettled = String(settled);
       stage.dataset.fieldState = progress === 0 ? 'sphere' : progress === 1 ? 'docked' : 'morph';
