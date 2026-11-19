@@ -1,5 +1,15 @@
 # Architecture and review decisions
 
+## Work enters during the orb transition
+
+Implement the selected “Work moves in” direction with normal document flow. The homepage hero is shorter; stacked portrait and short landscape layouts place the role and section link above the artwork. Compact stage spacing keeps the sphere prominent while bringing the work section closer. Work links remain ordinary visible anchors. There is no extra trail, section transform, concealed content, or synthetic scroll distance.
+
+Measure the initial sphere's projected vertical extent once. In stacked layouts, let the introduction and role scroll clear before morphing, while retaining the complete sphere below the sticky header and inside the viewport. The orb travels upward from the start of the morph instead of waiting for its first quarter. End progress when the Selected work heading reaches the header's reading margin, capped to the available native scroll. Include the computed scroll margin and root scroll padding so a native fragment link reaches that same endpoint. Crossfade into the header mark according to its actual vertical arrival, so the moving word does not disappear behind the opaque header before the miniature appears. Measured start/end offsets are exposed alongside the existing field state for browser tests and the optional benchmark.
+
+The bounded canvas, reusable projection buffers, original 8,910 particles, static SVG, finite settling, and no-idle behavior remain. Layout and text work without JavaScript and with reduced motion. No rendering dependencies or deployment changes are needed.
+
+The approved case-study titles are “Measuring Windows glitchiness” and “Building the evaluation stack for OS engineering agents.” The latter description identifies evaluation infrastructure across OS performance, power, reliability, and memory. The Glitchiness description identifies the named perceptual metric. Shared content metadata supplies headings, listings, and social descriptions; existing URLs and case-study evidence remain intact. Earlier sections below describe previous releases.
+
 ## Bounded canvas renderer, 19 November 2026
 
 Keep Canvas 2D and the original 8,910-particle artwork. Each morph frame now interpolates and projects into reusable numeric buffers and classifies depth once. Stable linked indices retain the same point order within each of the eight compositing bands. The completed lettering projection is reused while the mark travels. This removes two temporary point clouds and eight repeated depth-classification scans per frame without changing geometry, point density, or circle rendering.

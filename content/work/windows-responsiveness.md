@@ -1,6 +1,6 @@
 ---
-title: Measuring Windows sluggishness
-description: Building and validating a metric for experienced Windows sluggishness.
+title: Measuring Windows glitchiness
+description: Building and validating Glitchiness, a perceptual metric for Windows responsiveness.
 status: published
 date: 2026-11-18
 project: Glitchiness
