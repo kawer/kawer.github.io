@@ -153,14 +153,19 @@ for (const route of ['/', '/work/']) {
 }
 
 
-const fieldMetrics = page => page.evaluate(() => {
-  const stage = document.querySelector('.field-stage');
-  const header = document.querySelector('.site-header').getBoundingClientRect();
-  const work = document.querySelector('#selected-work').getBoundingClientRect();
-  const start = Number(stage.dataset.fieldStart || 0);
-  const end = Number(stage.dataset.fieldEnd || Math.max(1,work.top+scrollY-header.height-24));
-  return { start, end };
-});
+const fieldMetrics = async page => {
+  // Viewport/font layout changes are measured on the next animation frame.
+  // Let resize events and ResizeObserver deliver before consuming that range.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  return page.evaluate(() => {
+    const stage = document.querySelector('.field-stage');
+    const header = document.querySelector('.site-header').getBoundingClientRect();
+    const work = document.querySelector('#selected-work').getBoundingClientRect();
+    const start = Number(stage.dataset.fieldStart || 0);
+    const end = Number(stage.dataset.fieldEnd || Math.max(1,work.top+scrollY-header.height-24));
+    return { start, end };
+  });
+};
 const progress = page => page.locator('.field-stage').getAttribute('data-field-progress').then(Number);
 const canvasDigest = canvas => canvas.evaluate(async element => {
   const bytes = new TextEncoder().encode(element.toDataURL());
