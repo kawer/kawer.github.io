@@ -4,6 +4,8 @@
 
 The live tall-desktop failure was reproduced at 3840×2160: the page stopped at 636px while the morph required 840px, leaving progress at 0.75714. New coverage checks intermediate rendered progress on fast scroll jumps, complete docking at tall desktop sizes, exact reversal after settling, and immediate preference updates with legacy motion listeners and no ResizeObserver.
 
+The first hosted run caught a late layout measurement snapping directly to the scroll target and skipping intermediate shapes. Font/element measurements now preserve active interpolation, and forced restoration snaps are ignored if scrolling moved after the request. The jump test also changes the hero content box while scrolling to cover that race.
+
 Independent focused review verified that active reversal converges exactly, rendering stops after settling, hidden-document rendering cancels, and showing the document or changing reduced-motion preferences restores the correct target. These compatibility probes use Chromium with selected APIs unavailable; actual Safari rendering is not claimed.
 
 Writing and legacy blog routes are tested as 404, with no public links or sitemap entries. Draft and private-source exclusion, résumé bytes, metric scope, compact layouts, accessibility, native navigation, and the static fallbacks remain covered. CSS and entry-script content versions are checked against their source hashes. Earlier results below describe previous releases.

@@ -13,6 +13,7 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let frame = 0, measureNeeded = true, docked = false;
   let visualProgress = 0, initialized = false, lastFrameTime = 0;
+  let snapScrollY = null;
   let artX = 0, artY = 0, artSize = 0, start = 0, end = 1;
   const clamp = value => Math.max(0,Math.min(1,value));
   const ease = value => { const t = clamp(value); return t*t*(3-2*t); };
@@ -67,7 +68,9 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
       const layoutChanged = measureNeeded;
       if (measureNeeded) measure();
       const targetProgress = clamp((window.scrollY-start)/(end-start));
-      if (!initialized || layoutChanged) {
+      const shouldSnap = snapScrollY !== null && snapScrollY === window.scrollY;
+      snapScrollY = null;
+      if (!initialized || shouldSnap) {
         visualProgress = targetProgress;
         initialized = true;
       } else {
@@ -102,23 +105,24 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
       if (!settled) queue();
     } catch { staticFallback(); }
   }
-  function queue(needsMeasure = false) {
+  function queue(needsMeasure = false, snap = false) {
     measureNeeded = measureNeeded || needsMeasure;
+    if (snap) snapScrollY = window.scrollY;
     if (!frame && !document.hidden) frame = requestAnimationFrame(render);
   }
   // Move outside transformed artwork ancestors so viewport coordinates stay exact.
   canvas.classList.add('scroll-field');
   document.body.append(canvas);
   window.addEventListener('scroll',()=>queue(),{passive:true});
-  window.addEventListener('resize',()=>queue(true),{passive:true});
-  window.addEventListener('pageshow',()=>queue(true));
-  window.visualViewport?.addEventListener('resize',()=>queue(true),{passive:true});
+  window.addEventListener('resize',()=>queue(true,true),{passive:true});
+  window.addEventListener('pageshow',event=>queue(true,event.persisted));
+  window.visualViewport?.addEventListener('resize',()=>queue(true,true),{passive:true});
   const motionChanged = () => queue(true);
   if (typeof reducedMotion.addEventListener === 'function') reducedMotion.addEventListener('change',motionChanged);
   else if (typeof reducedMotion.addListener === 'function') reducedMotion.addListener(motionChanged);
   document.addEventListener('visibilitychange',()=>{
     if (document.hidden) { cancelAnimationFrame(frame); frame=0; }
-    else queue(true);
+    else queue(true,true);
   });
   if (typeof ResizeObserver === 'function') {
     const observer = new ResizeObserver(()=>queue(true));

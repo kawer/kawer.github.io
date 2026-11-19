@@ -298,6 +298,8 @@ test('fast scroll jumps animate through intermediate shapes and dock on tall scr
       const stage = document.querySelector('.field-stage');
       const samples = [];
       scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+      // Late font/element measurements must not turn a scroll into an instant snap.
+      document.querySelector('.lab-hero').style.borderBottom = '1px solid transparent';
       function sample() {
         samples.push(Number(stage.dataset.fieldProgress));
         if (stage.dataset.fieldState === 'docked' && stage.dataset.fieldSettled === 'true') return resolve(samples);
