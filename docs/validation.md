@@ -1,5 +1,24 @@
 # Validation
 
+## Orb rendering performance, 19 November 2026
+
+Compared deployed commit `ff5ec24` with the bounded renderer using `scripts/profile-orb.mjs`, headless Chromium 156 on the same local machine, a 1440×1000 viewport at DPR 2, two warm-up passes and four measured forward/reverse scroll passes. Runs were sequential, with no other browser tests running. Callback timing includes JavaScript and Canvas command submission, not asynchronous raster/compositor completion. Frame spacing is separately sampled during native scroll input; these are local laboratory measurements, not field Core Web Vitals or a hardware frame-rate guarantee.
+
+| Measurement | Deployed renderer | Bounded renderer |
+| --- | ---: | ---: |
+| Normal CPU callback median / p95 | 3.1 / 4.2 ms | 2.2 / 2.9 ms |
+| Fourfold CPU throttle callback median / p95 | 19.4 / 41.8 ms | 12.5 / 21.7 ms |
+| Normal CPU frame spacing median / p95 | 16.7 / 33.4 ms | 16.7 / 33.3 ms |
+| Fourfold throttle frame spacing median / p95 | 116.6 / 250.0 ms | 83.4 / 133.3 ms |
+| Canvas backing pixels, 1440×1000 at DPR 2 | 5,760,000 | 2,178,576 |
+| Canvas backing pixels, 3840×2160 at DPR 2 | 33,177,600 | 2,238,016 |
+
+The 4K backing surface is 93.3% smaller without reducing resolution or particle count. The warm visible-morph samples number 245/296 before/after at normal CPU and 69/82 at fourfold throttle. Timing varies with machine load and browser rasterization. Re-run the documented command to compare future changes rather than using these values as fixed test thresholds.
+
+Visual comparison captured 48 matched before/after states (96 screenshots) at 320×740, 390×844, 844×390 landscape, 1440×1000 at DPR 1 and 2, and 3840×2160 at DPR 2. Progress samples were 0, .2, .45, .62, .8, .94, .96, and 1. No horizontal overflow or clipping was observed. Full-frame mean channel difference was at most 0.00023 on the 0–255 scale, limited to tiny dot-edge antialiasing differences. The original particles, lettering, colors, depth-band compositing order, and handoff remain visually intact. Screenshots and raw timing/pixel reports are local artifacts under `/workspace/artifacts/orb-performance`, excluded from deployment.
+
+New browser coverage checks that the moving surface stays smaller than the viewport, invisible artwork stops clearing after handoff, and reversal resumes painting. The existing accessibility, restoration, fast-jump, no-idle-rendering, native-input, and static-fallback suite remains applicable. Lint, type checking, build, eleven Node cases, and all fifty desktop/mobile browser cases pass locally, with zero violations in twenty-two axe scans. Earlier sections below record previous releases.
+
 ## Desktop animation and Notes withdrawal, 19 November 2026
 
 The live tall-desktop failure was reproduced at 3840×2160: the page stopped at 636px while the morph required 840px, leaving progress at 0.75714. New coverage checks intermediate rendered progress on fast scroll jumps, complete docking at tall desktop sizes, exact reversal after settling, and immediate preference updates with legacy motion listeners and no ResizeObserver.

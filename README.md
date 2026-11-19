@@ -21,6 +21,14 @@ npm run test:browser
 
 The browser tests start their own preview server. Screenshots and test reports are local review artifacts and are not deployed.
 
+To profile the orb, leave the preview server running and use a second terminal:
+
+```sh
+node scripts/profile-orb.mjs http://127.0.0.1:4173 /tmp/orb-timing.json
+```
+
+This optional Chromium benchmark warms both scroll directions, then reports visible-morph callback durations, frame spacing, and canvas pixel count at normal and fourfold CPU throttling. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an installed Chromium binary. Compare builds on the same idle machine; these local results do not measure real-user Core Web Vitals.
+
 ## Content
 
 The site features two flagship case studies and supporting on-device/statistical work. Engineering Notes is temporarily withdrawn: its sources remain drafts, but the build generates no Writing or legacy blog routes. The original briefing, claim-review ledger, excluded details, and local review output remain gitignored under `.private/`.
