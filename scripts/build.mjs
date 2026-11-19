@@ -1,19 +1,20 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { renderFieldSvg } from './field-svg.mjs';
 import { loadCollection, markdown } from './content.mjs';
 import { renderHome, renderAbout, renderResume, renderListing, renderArticle, render404 } from './templates.mjs';
 
 const root = process.cwd();
 const output = join(root, 'dist');
+const assetVersions = Object.fromEntries(await Promise.all(['/assets/css/site.css', '/assets/js/field.js'].map(async asset => [asset, createHash('sha256').update(await readFile(join(root,asset))).digest('hex').slice(0,12)])));
 const profile = JSON.parse(await readFile(join(root, 'content/profile.json'), 'utf8'));
 const work = await loadCollection('work');
 // Curate the homepage and Work index independently of preparation dates.
 const workOrder = profile.selectedWork.map(item => item.slug);
 const order = item => { const index = workOrder.indexOf(item.slug); return index === -1 ? workOrder.length : index; };
 work.sort((a, b) => order(a) - order(b));
-const writing = await loadCollection('writing');
-const data = { ...profile, work, writing };
+const data = { ...profile, work };
 const routes = [];
 
 await rm(output, { recursive: true, force: true });
@@ -23,26 +24,18 @@ async function writeRoute(path, html, indexable = true) {
   const filename = path.endsWith('.html') ? path.slice(1) : `${path.slice(1)}index.html`;
   const destination = join(output, filename);
   await mkdir(dirname(destination), { recursive: true });
-  await writeFile(destination, html);
+  const versioned = html.replace(/(href|src)="(\/assets\/(?:css\/site\.css|js\/field\.js))"/g, (_match, attribute, asset) => `${attribute}="${asset}?v=${assetVersions[asset]}"`);
+  await writeFile(destination, versioned);
   if (indexable) routes.push(path);
 }
 
 await writeRoute('/', renderHome(data));
 await writeRoute('/about/', renderAbout(data));
 await writeRoute('/resume/', renderResume(data));
-/** @type {[string, typeof work][]} */
-const collections = [['work', work], ['writing', writing]];
-for (const [kind, items] of collections) {
-  await writeRoute(`/${kind}/`, renderListing(kind, items));
-  for (const item of items) await writeRoute(item.url, renderArticle(kind, item, markdown.render(item.body)));
-}
+await writeRoute('/work/', renderListing('work',work));
+for (const item of work) await writeRoute(item.url, renderArticle('work',item,markdown.render(item.body)));
 await writeRoute('/404.html', render404(), false);
-
-// Old article URLs show the current notes without republishing the withheld essay.
-for (const path of ['/docs/blog/', '/docs/blog/index.html', '/docs/blog/bi-directional-taxonomies.html']) {
-  const html = renderListing('writing', writing).replace('</head>', '<meta name="robots" content="noindex,follow"></head>');
-  await writeRoute(path, html, false);
-}
+// Writing and legacy blog routes are withdrawn; their sources remain for later.
 
 // This allowlist is the deployment boundary. Never copy the repository or content tree.
 for (const asset of ['CNAME', 'assets/css/site.css', 'assets/js/field.js', 'assets/js/geometry.mjs', 'assets/fonts/IBMPlexSans-Regular.woff2', 'assets/fonts/IBMPlexSans-Medium.woff2', 'assets/fonts/IBM-Plex-LICENSE.txt', 'assets/favicon.svg', 'assets/social.svg', 'assets/social.png', 'docs/Lazaro_Kawer_Resume.pdf']) {
@@ -52,9 +45,6 @@ for (const asset of ['CNAME', 'assets/css/site.css', 'assets/js/field.js', 'asse
 }
 // Keep the earlier résumé URL compatible; both copies are byte-identical to the current PDF.
 await cp(join(root, 'docs/Lazaro_Kawer_Resume.pdf'), join(output, 'docs/Resume.pdf'));
-// Math fonts and styles are served locally; no third-party runtime requests.
-await cp(join(root, 'node_modules/katex/dist/katex.min.css'), join(output, 'assets/css/katex.min.css'));
-await cp(join(root, 'node_modules/katex/dist/fonts'), join(output, 'assets/css/fonts'), { recursive: true });
 await writeFile(join(output, 'assets/field.svg'), renderFieldSvg());
 await writeFile(join(output, '.nojekyll'), '');
 await writeFile(join(output, 'robots.txt'), 'User-agent: *\nAllow: /\nSitemap: https://kawer.dev/sitemap.xml\n');

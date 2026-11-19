@@ -1,5 +1,13 @@
 # Architecture and review decisions
 
+## Desktop animation and Notes withdrawal, 19 November 2026
+
+The live 3840×2160 desktop page had only 636px of native scrolling against an 840px animation endpoint, so the orb could never finish docking. The endpoint now respects actual available scroll distance. The shorter page after Notes withdrawal uses the same rule. Native input remains untouched and no filler scroll space is added.
+
+Scroll changes now animate toward their target through a finite interpolation, preserving intermediate shapes even on a single jump to the bottom. An epsilon snap ends rendering exactly at the target; the page has no idle animation loop. Layout changes and restored positions snap to their measured target. Visibility and reduced-motion changes cancel or refresh rendering. Older MediaQueryList listeners and missing ResizeObserver are handled without initialization errors. Geometry and the native header home link are unchanged.
+
+Engineering Notes is removed from the homepage, navigation, generated routes, and sitemap. Its two articles are drafts; neither Writing nor legacy blog routes are generated. Their old URLs return 404. Authoring templates and Markdown/math support remain in source for future use. Entry CSS and JavaScript URLs carry content versions to avoid stale cached updates. The sections below record earlier releases.
+
 ## Copy and reading layout cleanup, 18 November 2026
 
 Public pages no longer describe résumé provenance, editorial completeness, withheld material, or unfinished model-training directions. Case-study status panels are removed. Existing result names, denominators, contribution boundaries, and internal Windows deployment scope remain in the narrative. Omitting future work does not promote it to an accomplishment. Disclosure review remains a source-document workflow rather than website copy.

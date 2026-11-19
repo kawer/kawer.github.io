@@ -19,7 +19,7 @@ const htmlFiles = (await files(root)).filter(file => file.endsWith('.html'));
 
 test('primary routes exist with one h1, language and unique metadata', async () => {
   const descriptions = new Set();
-  for (const route of ['', 'work', 'writing', 'about', 'resume']) {
+  for (const route of ['', 'work', 'about', 'resume']) {
     const html = await readFile(join(root, route, 'index.html'), 'utf8');
     assert.match(html, /<html[^>]*lang="en"/);
     assert.equal((html.match(/<h1[\s>]/g) || []).length, 1, route);
@@ -58,6 +58,14 @@ test('every internal href and resource resolves, including fragments', async () 
   }
 });
 
+test('styles and the animation entry use content versions to avoid stale cached assets', async () => {
+  const version = async path => createHash('sha256').update(await readFile(path)).digest('hex').slice(0,12);
+  const css = `/assets/css/site.css?v=${await version('assets/css/site.css')}`;
+  for (const file of htmlFiles) assert.ok((await readFile(file,'utf8')).includes(`href="${css}"`));
+  const home = await readFile(join(root,'index.html'),'utf8');
+  assert.ok(home.includes(`src="/assets/js/field.js?v=${await version('assets/js/field.js')}"`));
+});
+
 test('unpublished content and repository internals cannot enter deployment', async () => {
   const output = await files(root);
   assert.ok(!output.some(path => /(?:node_modules|\.git|private-review|\.md$)/.test(relative(root, path))));
@@ -71,10 +79,7 @@ test('unpublished content and repository internals cannot enter deployment', asy
       }
     }
   }
-  const legacy = await readFile(join(root, 'docs/blog/bi-directional-taxonomies.html'), 'utf8');
-  assert.match(legacy, /<h1[^>]*>Writing<\/h1>/);
-  assert.match(legacy, /\/writing\/evaluating-proposed-code-changes\//);
-  assert.match(legacy, /noindex/);
+  assert.ok(!output.some(path => /^(?:writing|docs\/blog)(?:\/|$)/.test(relative(root, path))));
 });
 
 test('résumé bytes and custom-domain deployment files are preserved', async () => {
@@ -83,19 +88,19 @@ test('résumé bytes and custom-domain deployment files are preserved', async ()
   assert.equal((await readFile('dist/CNAME', 'utf8')).trim(), 'kawer.dev');
   assert.match(await readFile('dist/robots.txt', 'utf8'), /Sitemap: https:\/\/kawer\.dev\/sitemap.xml/);
   const sitemap = await readFile('dist/sitemap.xml', 'utf8');
-  for (const route of ['', 'work/', 'writing/', 'about/', 'resume/']) assert.ok(sitemap.includes(`https://kawer.dev/${route}<`));
+  for (const route of ['', 'work/', 'about/', 'resume/']) assert.ok(sitemap.includes(`https://kawer.dev/${route}<`));
 });
 
-test('engineering notes have current metadata and accessible mathematical notation', async () => {
-  const writing = await readFile(join(root, 'writing/index.html'), 'utf8');
-  assert.match(writing, /Technical note/);
-  assert.doesNotMatch(writing, /peer-reviewed|Articles are in preparation|Published research/);
-  const note = await readFile(join(root, 'writing/evaluating-proposed-code-changes/index.html'), 'utf8');
-  assert.match(note, /<math/);
-  assert.match(note, /katex.min.css/);
+test('engineering notes are withdrawn from routes, links, and the sitemap', async () => {
+  const sitemap = await readFile(join(root, 'sitemap.xml'), 'utf8');
+  assert.doesNotMatch(sitemap, /\/(?:writing|docs\/blog)\//);
+  for (const file of htmlFiles) {
+    const html = await readFile(file, 'utf8');
+    assert.doesNotMatch(html, /href="\/(?:writing|docs\/blog)(?:\/|")|Engineering notes|All notes/);
+  }
 });
 
-test('flagship case studies and new notes retain attribution and metric scope', async () => {
+test('flagship case studies retain attribution and metric scope', async () => {
   const home = await readFile(join(root, 'index.html'), 'utf8');
   assert.match(home, /work\/windows-responsiveness\//);
   assert.match(home, /work\/production-ai-evaluation\//);
@@ -111,12 +116,7 @@ test('flagship case studies and new notes retain attribution and metric scope', 
   assert.match(onDevice, /92% at least five seconds/);
   assert.match(onDevice, /internal (?:Windows )?builds/i);
   assert.doesNotMatch(onDevice, /71% accuracy|92% accuracy/);
-  const writing = await readFile(join(root, 'writing/index.html'), 'utf8');
-  assert.match(writing, /Technical note/);
-  assert.doesNotMatch(writing, /peer-reviewed|Articles are in preparation|Published research/);
-  const note = await readFile(join(root, 'writing/evaluating-proposed-code-changes/index.html'), 'utf8');
-  assert.match(note, /<math/);
-  assert.match(note, /katex.min.css/);
+
 });
 
 test('public pages contain the work without editorial review or status boilerplate', async () => {
