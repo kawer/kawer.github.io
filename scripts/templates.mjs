@@ -3,7 +3,7 @@ export const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (cha
 const e = escapeHtml;
 const link = (url, label, className = 'text-link') => `<a class="${className}" href="${e(url)}">${label}</a>`;
 const arrow = '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 13 13 3M3 3h10v10" stroke="currentColor" stroke-width="1.2"/></svg>';
-const nav = [['/work/','Work'],['/writing/','Writing'],['/about/','About'],['/resume/','Résumé']];
+const nav = [['/work/','Work'],['/about/','About'],['/resume/','Résumé']];
 export function renderPage({title, description, path, body, section = undefined, noindex = false, interactive = false}) {
   const fullTitle = title === 'Lazaro Kawer' ? 'Lazaro Kawer — AI & ML Engineering' : `${title} · Lazaro Kawer`;
   return `<!doctype html>
@@ -32,8 +32,7 @@ export function renderHome(profile) {
 <figure class="field-stage" aria-hidden="true"><div class="field-art"><img class="field-fallback" src="/assets/field.svg" width="900" height="900" alt="" fetchpriority="high"><canvas id="field-canvas" width="900" height="900" aria-hidden="true" hidden></canvas></div></figure>
 <div class="hero-foot"><p class="hero-role">Senior Research Engineer<br><span>Microsoft · Windows Fundamentals</span></p><a class="hero-scroll" href="#selected-work">Selected work <span aria-hidden="true">↓</span></a></div></section>
 <section class="section home-work" aria-labelledby="selected-work"><div class="section-heading"><h2 id="selected-work" class="section-title">Selected work</h2><p class="section-note">Agent evaluation and Windows responsiveness.<br>Two measurement problems, built into engineering systems.</p></div>${workRows(featuredWork(profile.work))}<p>${link(profile.work.some(item=>item.featured) ? '/work/#other-work' : '/work/','More engineering work '+arrow)}</p></section>
-<section class="section home-background" aria-labelledby="background"><div class="section-heading"><h2 id="background" class="section-title">Background</h2>${link('/about/','About me '+arrow)}</div>${experience(profile)}</section>
-${profile.writing.length ? `<section class="section writing-strip" aria-labelledby="home-writing"><h2 id="home-writing" class="section-title">Engineering notes</h2><div>${writingRows(profile.writing.slice(0,2),3)}${link('/writing/','All notes '+arrow)}</div></section>` : ''}`;
+<section class="section home-background" aria-labelledby="background"><div class="section-heading"><h2 id="background" class="section-title">Background</h2>${link('/about/','About me '+arrow)}</div>${experience(profile)}</section>`;
  return renderPage({title:'Lazaro Kawer',description:profile.intro,path:'/',body,interactive:true});
 }
 export function renderAbout(profile) {

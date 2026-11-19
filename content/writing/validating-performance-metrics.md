@@ -1,7 +1,7 @@
 ---
 title: Validating a metric of experienced performance
 description: A detector, a composite score, and a person's experience need different kinds of validation.
-status: published
+status: draft
 date: 2026-11-18
 tags: [Measurement, Performance, Validation]
 ---

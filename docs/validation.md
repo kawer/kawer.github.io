@@ -1,5 +1,17 @@
 # Validation
 
+## Desktop animation and Notes withdrawal, 19 November 2026
+
+The live tall-desktop failure was reproduced at 3840×2160: the page stopped at 636px while the morph required 840px, leaving progress at 0.75714. New coverage checks intermediate rendered progress on fast scroll jumps, complete docking at tall desktop sizes, exact reversal after settling, and immediate preference updates with legacy motion listeners and no ResizeObserver.
+
+The first hosted run caught a late layout measurement snapping directly to the scroll target and skipping intermediate shapes. Font/element measurements now preserve active interpolation, and forced restoration snaps are ignored if scrolling moved after the request. The jump test also changes the hero content box while scrolling to cover that race.
+
+Independent focused review verified that active reversal converges exactly, rendering stops after settling, hidden-document rendering cancels, and showing the document or changing reduced-motion preferences restores the correct target. These compatibility probes use Chromium with selected APIs unavailable; actual Safari rendering is not claimed.
+
+Writing and legacy blog routes are tested as 404, with no public links or sitemap entries. Draft and private-source exclusion, résumé bytes, metric scope, compact layouts, accessibility, native navigation, and the static fallbacks remain covered. CSS and entry-script content versions are checked against their source hashes. Earlier results below describe previous releases.
+
+Final local checks pass: lint, type checking, build, eleven Node tests, and all 48 desktop/mobile browser cases. Twenty-two axe scans report zero violations. Screenshots cover the public routes and initial/midway/docked animation states under `/workspace/artifacts/orb-notes`.
+
 ## Copy and layout cleanup, 18 November 2026
 
 `npm run check` passes, including ten Node tests. All 50 desktop/mobile Chromium cases pass, with zero violations across 30 axe scans. New assertions reject public editorial/status boilerplate and check that article introductions flow directly into the aligned reading column without large intervening gaps. Existing checks preserve internal-build scope, exact metrics, résumé bytes, links, responsive layouts, script-free reading pages, and the scroll identity.

@@ -5,9 +5,8 @@ import { mkdir } from 'node:fs/promises';
 import { loadCollection } from '../scripts/content.mjs';
 
 const work = await loadCollection('work');
-const writing = await loadCollection('writing');
 const featuredCount = work.filter(item=>item.featured).length || work.length;
-const pages = ['/', '/work/', '/writing/', '/about/', '/resume/', ...work.map(item=>item.url), ...writing.map(item=>item.url), '/docs/blog/bi-directional-taxonomies.html', '/404.html'];
+const pages = ['/', '/work/', '/about/', '/resume/', ...work.map(item=>item.url), '/404.html'];
 for (const route of pages) {
   test(`${route} renders accessibly without horizontal overflow`, async ({ page }, testInfo) => {
     const errors = [];
@@ -32,7 +31,7 @@ test('keyboard skip link and primary navigation work', async ({ page }) => {
   await expect(skip).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#main/);
-  for (const name of ['Work', 'Writing', 'About', 'Résumé']) {
+  for (const name of ['Work', 'About', 'Résumé']) {
     await page.locator('.site-nav').getByRole('link', { name, exact: true }).click();
     await expect(page.locator('h1')).toBeVisible();
     await expect(page.locator('.site-nav a[aria-current="page"]')).toHaveText(name);
@@ -63,7 +62,7 @@ test('reading pages use compact sections and an aligned article column', async (
   expect(Math.abs(bounds.headingLeft - bounds.proseLeft)).toBeLessThan(2);
   expect(bounds.gap).toBeLessThanOrEqual(36);
   expect(bounds.width).toBeLessThanOrEqual(780);
-  for (const route of ['/about/', '/resume/', '/work/', '/writing/']) {
+  for (const route of ['/about/', '/resume/', '/work/']) {
     await page.goto(route);
     const gap = await page.evaluate(() => {
       const heading = document.querySelector('.page-heading').getBoundingClientRect();
@@ -74,6 +73,16 @@ test('reading pages use compact sections and an aligned article column', async (
   }
 });
 
+test('engineering notes and legacy blog routes are withdrawn', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.site-nav a')).toHaveText(['Work', 'About', 'Résumé']);
+  await expect(page.getByRole('heading', { name: 'Engineering notes' })).toHaveCount(0);
+  await expect(page.locator('a[href^="/writing/"], a[href^="/docs/blog/"]')).toHaveCount(0);
+  for (const route of ['/writing/', '/writing/evaluating-proposed-code-changes/', '/writing/validating-performance-metrics/', '/docs/blog/', '/docs/blog/index.html', '/docs/blog/bi-directional-taxonomies.html']) {
+    expect((await page.request.get(route)).status()).toBe(404);
+  }
+});
+
 test('homepage enhancement loads locally and reading pages need no JavaScript', async ({ page }) => {
   const requests = [];
   page.on('request', request => requests.push(request.url()));
@@ -81,9 +90,9 @@ test('homepage enhancement loads locally and reading pages need no JavaScript', 
   await expect(page.locator('h1')).toBeVisible();
   const scripts = page.locator('script[src]');
   await expect(scripts).toHaveCount(1);
-  expect(await scripts.first().getAttribute('src')).toMatch(/^\/assets\/.*\.js$/);
+  expect(await scripts.first().getAttribute('src')).toMatch(/^\/assets\/js\/field\.js\?v=[a-f0-9]{12}$/);
   expect(requests.every(url => url.startsWith('http://127.0.0.1:4173/'))).toBe(true);
-  for (const route of ['/work/', '/writing/', '/about/', '/resume/']) {
+  for (const route of ['/work/', '/about/', '/resume/']) {
     await page.goto(route);
     await expect(page.locator('script')).toHaveCount(0);
   }
@@ -149,7 +158,7 @@ const fieldMetrics = page => page.evaluate(() => {
   const hero = document.querySelector('.lab-hero').getBoundingClientRect();
   const header = document.querySelector('.site-header').getBoundingClientRect();
   const start = Math.max(0, art.bottom + scrollY - innerHeight + 24);
-  const end = Math.max(start + 1, hero.bottom + scrollY - header.height);
+  const end = Math.max(start + 1, Math.min(hero.bottom + scrollY - header.height, document.documentElement.scrollHeight - innerHeight));
   return { start, end };
 });
 const progress = page => page.locator('.field-stage').getAttribute('data-field-progress').then(Number);
@@ -170,12 +179,17 @@ async function readyField(page) {
   await expect(page.locator('.field-stage')).toHaveAttribute('data-field-ready', 'true');
 }
 async function nativeScroll(page, y) {
-  await page.evaluate(top => scrollTo({ top, behavior: 'instant' }), y);
-  await expect.poll(() => page.evaluate(target => Math.abs(scrollY - target), y)).toBeLessThanOrEqual(1);
+  const target = await page.evaluate(top => {
+    const target = Math.max(0, Math.min(top, document.documentElement.scrollHeight - innerHeight));
+    scrollTo({ top: target, behavior: 'instant' });
+    return target;
+  }, y);
+  await expect.poll(() => page.evaluate(target => Math.abs(scrollY - target), target)).toBeLessThanOrEqual(1);
   const { start, end } = await fieldMetrics(page);
   const expected = await page.evaluate(({ start, end }) => Math.max(0, Math.min(1, (scrollY - start) / (end - start))), { start, end });
   await expect.poll(() => progress(page)).toBeGreaterThanOrEqual(expected - .002);
   await expect.poll(() => progress(page)).toBeLessThanOrEqual(expected + .002);
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-settled', 'true');
 }
 async function assertDockBounds(page) {
   const bounds = await page.evaluate(() => {
@@ -271,6 +285,58 @@ test('scroll morph reverses deterministically and docks a tappable native brand'
   else await page.mouse.click(x, y);
   await expect(page).toHaveURL('http://127.0.0.1:4173/');
   await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(1);
+});
+
+test('fast scroll jumps animate through intermediate shapes and dock on tall screens', async ({ page }, testInfo) => {
+  const widths = testInfo.project.name === 'desktop' ? [1920, 3840] : [1920];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 2160 });
+    await readyField(page);
+    const limit = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    expect(limit).toBeGreaterThan(0);
+    const samples = await page.evaluate(() => new Promise((resolve, reject) => {
+      const stage = document.querySelector('.field-stage');
+      const samples = [];
+      scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+      // Late font/element measurements must not turn a scroll into an instant snap.
+      document.querySelector('.lab-hero').style.borderBottom = '1px solid transparent';
+      function sample() {
+        samples.push(Number(stage.dataset.fieldProgress));
+        if (stage.dataset.fieldState === 'docked' && stage.dataset.fieldSettled === 'true') return resolve(samples);
+        if (samples.length > 180) return reject(new Error('The scroll morph did not finish docking'));
+        requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    }));
+    expect(samples.filter(value => value > 0 && value < 1).length).toBeGreaterThan(3);
+    await expect(page.locator('.field-stage')).toHaveAttribute('data-field-progress', '1.00000');
+    await assertDockBounds(page);
+    await nativeScroll(page, 0);
+    await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state', 'sphere');
+  }
+});
+
+test('older motion listeners and missing resize observer still animate and follow preferences', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => {
+    const match = window.matchMedia.bind(window);
+    window.matchMedia = query => {
+      const result = match(query);
+      Object.defineProperty(result, 'addEventListener', { value: undefined });
+      return result;
+    };
+    window.ResizeObserver = undefined;
+  });
+  await readyField(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state', 'static');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state', 'sphere');
+  const { end } = await fieldMetrics(page);
+  await nativeScroll(page, end + 40);
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state', 'docked');
+  expect(errors).toEqual([]);
 });
 
 test('direct anchors, reload restoration, and resized layouts recompute docking', async ({ page }) => {

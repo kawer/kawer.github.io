@@ -12,6 +12,8 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
   const sphere = createSurface(), name = createNameSurface(sphere.length);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let frame = 0, measureNeeded = true, docked = false;
+  let visualProgress = 0, initialized = false, lastFrameTime = 0;
+  let snapScrollY = null;
   let artX = 0, artY = 0, artSize = 0, start = 0, end = 1;
   const clamp = value => Math.max(0,Math.min(1,value));
   const ease = value => { const t = clamp(value); return t*t*(3-2*t); };
@@ -44,7 +46,9 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
     artSize = rect.width;
     // Mobile sees the complete orb before the transformation begins.
     start = Math.max(0,rect.bottom+window.scrollY-window.innerHeight+24);
-    end = Math.max(start+1,hero.getBoundingClientRect().bottom+window.scrollY-header.getBoundingClientRect().height);
+    const heroEnd = hero.getBoundingClientRect().bottom+window.scrollY-header.getBoundingClientRect().height;
+    const scrollLimit = Math.max(0,document.documentElement.scrollHeight-window.innerHeight);
+    end = Math.max(start+1,Math.min(heroEnd,scrollLimit));
     const target = dock.getBoundingClientRect();
     fit(mini,miniContext,target.width,target.height);
     paint(miniContext,projectSurface(name,0,0),target.width/2,target.height/2,target.width/2.9,0.45);
@@ -53,17 +57,30 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
   function staticFallback() {
     canvas.hidden = true; mini.hidden = true;
     delete stage.dataset.fieldReady;
-    stage.dataset.fieldState = 'static'; stage.dataset.fieldProgress = '0';
+    stage.dataset.fieldState = 'static'; stage.dataset.fieldProgress = '0'; stage.dataset.fieldSettled = 'true';
     header.style.setProperty('--dock-opacity','0');
-    docked = false;
+    docked = false; initialized = false;
   }
-  function render() {
+  function render(now = performance.now()) {
     frame = 0;
     if (reducedMotion.matches) { staticFallback(); return; }
     try {
       const layoutChanged = measureNeeded;
       if (measureNeeded) measure();
-      const progress = clamp((window.scrollY-start)/(end-start));
+      const targetProgress = clamp((window.scrollY-start)/(end-start));
+      const shouldSnap = snapScrollY !== null && snapScrollY === window.scrollY;
+      snapScrollY = null;
+      if (!initialized || shouldSnap) {
+        visualProgress = targetProgress;
+        initialized = true;
+      } else {
+        const elapsed = Math.max(1,Math.min(32,now-lastFrameTime));
+        visualProgress += (targetProgress-visualProgress)*(1-Math.exp(-elapsed/65));
+        if (Math.abs(targetProgress-visualProgress) < 0.0001) visualProgress = targetProgress;
+      }
+      lastFrameTime = now;
+      const progress = visualProgress;
+      const settled = progress === targetProgress;
       if (docked && progress === 1 && !layoutChanged) return;
       const target = dock.getBoundingClientRect();
       const morph = ease(progress/0.62);
@@ -72,7 +89,7 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
       const points = sphere.map((point,index) => ({x:point.x+(name[index].x-point.x)*morph,y:point.y+(name[index].y-point.y)*morph,z:point.z+(name[index].z-point.z)*morph}));
       const projected = projectSurface(points,INITIAL_YAW*(1-morph),INITIAL_PITCH*(1-morph));
       const targetX = target.left+target.width/2, targetY = target.top+target.height/2;
-      const originY = progress === 0 ? artY-window.scrollY : artY-start;
+      const originY = artY-Math.min(window.scrollY,start);
       const x = artX+(targetX-artX)*travel, y = originY+(targetY-originY)*travel;
       const sourceScale = artSize*0.345, targetScale = target.width/2.9;
       const scale = sourceScale+(targetScale-sourceScale)*travel;
@@ -82,28 +99,35 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
       header.style.setProperty('--dock-opacity',String(handoff));
       canvas.hidden = progress === 1; mini.hidden = false;
       stage.dataset.fieldReady = 'true'; stage.dataset.fieldProgress = progress.toFixed(5);
+      stage.dataset.fieldSettled = String(settled);
       stage.dataset.fieldState = progress === 0 ? 'sphere' : progress === 1 ? 'docked' : 'morph';
       docked = progress === 1;
+      if (!settled) queue();
     } catch { staticFallback(); }
   }
-  function queue(needsMeasure = false) {
+  function queue(needsMeasure = false, snap = false) {
     measureNeeded = measureNeeded || needsMeasure;
+    if (snap) snapScrollY = window.scrollY;
     if (!frame && !document.hidden) frame = requestAnimationFrame(render);
   }
   // Move outside transformed artwork ancestors so viewport coordinates stay exact.
   canvas.classList.add('scroll-field');
   document.body.append(canvas);
   window.addEventListener('scroll',()=>queue(),{passive:true});
-  window.addEventListener('resize',()=>queue(true),{passive:true});
-  window.addEventListener('pageshow',()=>queue(true));
-  window.visualViewport?.addEventListener('resize',()=>queue(true),{passive:true});
-  reducedMotion.addEventListener('change',()=>queue(true));
+  window.addEventListener('resize',()=>queue(true,true),{passive:true});
+  window.addEventListener('pageshow',event=>queue(true,event.persisted));
+  window.visualViewport?.addEventListener('resize',()=>queue(true,true),{passive:true});
+  const motionChanged = () => queue(true);
+  if (typeof reducedMotion.addEventListener === 'function') reducedMotion.addEventListener('change',motionChanged);
+  else if (typeof reducedMotion.addListener === 'function') reducedMotion.addListener(motionChanged);
   document.addEventListener('visibilitychange',()=>{
     if (document.hidden) { cancelAnimationFrame(frame); frame=0; }
-    else queue(true);
+    else queue(true,true);
   });
-  const observer = new ResizeObserver(()=>queue(true));
-  observer.observe(hero); observer.observe(art); observer.observe(header);
+  if (typeof ResizeObserver === 'function') {
+    const observer = new ResizeObserver(()=>queue(true));
+    observer.observe(hero); observer.observe(art); observer.observe(header);
+  }
   document.fonts.ready.then(()=>queue(true));
   queue(true);
 }

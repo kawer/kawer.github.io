@@ -1,7 +1,7 @@
 ---
 title: Evaluating a proposed code change
 description: Separate operational validity, source-grounded judgment, measured behavior, and developer adoption when assessing an agent's fix.
-status: published
+status: draft
 date: 2026-11-18
 tags: [Evaluation, Agent systems, Experimental design]
 ---
