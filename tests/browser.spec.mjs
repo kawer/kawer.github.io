@@ -154,11 +154,11 @@ for (const route of ['/', '/work/']) {
 
 
 const fieldMetrics = page => page.evaluate(() => {
-  const art = document.querySelector('.field-art').getBoundingClientRect();
-  const hero = document.querySelector('.lab-hero').getBoundingClientRect();
+  const stage = document.querySelector('.field-stage');
   const header = document.querySelector('.site-header').getBoundingClientRect();
-  const start = Math.max(0, art.bottom + scrollY - innerHeight + 24);
-  const end = Math.max(start + 1, Math.min(hero.bottom + scrollY - header.height, document.documentElement.scrollHeight - innerHeight));
+  const work = document.querySelector('#selected-work').getBoundingClientRect();
+  const start = Number(stage.dataset.fieldStart || 0);
+  const end = Number(stage.dataset.fieldEnd || Math.max(1,work.top+scrollY-header.height-24));
   return { start, end };
 });
 const progress = page => page.locator('.field-stage').getAttribute('data-field-progress').then(Number);
@@ -316,6 +316,52 @@ test('fast scroll jumps animate through intermediate shapes and dock on tall scr
   }
 });
 
+test('work arrives during the morph and particles stay clear of readable text', async ({ page, isMobile }) => {
+  const sizes = isMobile ? [{ width:390,height:844 },{ width:320,height:740 }] : [{ width:1440,height:1000 },{ width:844,height:390 }];
+  for (const size of sizes) {
+    await page.setViewportSize(size);
+    await readyField(page);
+    const { start,end } = await fieldMetrics(page);
+    for (const phase of [.25,.45,.75]) {
+      await nativeScroll(page,start+(end-start)*phase);
+      const flow = await page.evaluate(() => {
+        const work = document.querySelector('#selected-work').getBoundingClientRect();
+        const title = document.querySelector('.home-work .work-title').getBoundingClientRect();
+        const header = document.querySelector('.site-header').getBoundingClientRect();
+        const canvas = document.querySelector('#field-canvas'), bounds = canvas.getBoundingClientRect();
+        const context = canvas.getContext('2d'), ratio = canvas.width/bounds.width;
+        const overlaps = [];
+        if (!canvas.hidden) for (const selector of ['.hero-heading','.hero-foot','.home-work .section-heading','.home-work .work-title']) {
+          for (const element of document.querySelectorAll(selector)) {
+            const walker = document.createTreeWalker(element,NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) {
+              if (!walker.currentNode.textContent.trim()) continue;
+              const range = document.createRange(); range.selectNodeContents(walker.currentNode);
+              for (const rect of range.getClientRects()) {
+                const left = Math.max(0,rect.left,bounds.left), right = Math.min(innerWidth,rect.right,bounds.right);
+                const top = Math.max(header.bottom,rect.top,bounds.top), bottom = Math.min(innerHeight,rect.bottom,bounds.bottom);
+                if (right <= left || bottom <= top) continue;
+                const x = Math.max(0,Math.floor((left-bounds.left)*ratio)), y = Math.max(0,Math.floor((top-bounds.top)*ratio));
+                const width = Math.min(canvas.width-x,Math.ceil((right-left)*ratio)), height = Math.min(canvas.height-y,Math.ceil((bottom-top)*ratio));
+                if (width <= 0 || height <= 0) continue;
+                const pixels = context.getImageData(x,y,width,height).data;
+                if (pixels.some((alpha,index)=>index%4 === 3 && alpha > 8)) overlaps.push(selector);
+              }
+            }
+          }
+        }
+        return { workTop:work.top,titleBottom:title.bottom,headerBottom:header.bottom,height:innerHeight,overlaps };
+      });
+      expect(flow.overlaps).toEqual([]);
+      if (phase === .45) expect(flow.workTop).toBeLessThan(flow.height*.75);
+      if (phase === .75) {
+        expect(flow.workTop).toBeGreaterThan(flow.headerBottom);
+        expect(flow.titleBottom).toBeLessThan(flow.height);
+      }
+    }
+  }
+});
+
 test('artwork uses a bounded surface and stops painting after the header handoff', async ({ page, isMobile }) => {
   if (!isMobile) await page.setViewportSize({ width: 3840, height: 2160 });
   await readyField(page);
@@ -338,7 +384,7 @@ test('artwork uses a bounded surface and stops painting after the header handoff
   const clears = await page.evaluate(() => window.fieldClears);
   await nativeScroll(page,start+(end-start)*.99);
   expect(await page.evaluate(() => window.fieldClears)).toBe(clears);
-  await nativeScroll(page,start+(end-start)*.9);
+  await nativeScroll(page,start+(end-start)*.45);
   await expect(page.locator('#field-canvas')).toBeVisible();
   expect(await page.evaluate(() => window.fieldClears)).toBeGreaterThan(clears);
   await nativeScroll(page,0);

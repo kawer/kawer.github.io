@@ -5,11 +5,17 @@ const mini = /** @type {HTMLCanvasElement | null} */ (document.querySelector('#b
 const stage = /** @type {HTMLElement | null} */ (document.querySelector('.field-stage'));
 const art = /** @type {HTMLElement | null} */ (document.querySelector('.field-art'));
 const hero = /** @type {HTMLElement | null} */ (document.querySelector('.lab-hero'));
+const foot = /** @type {HTMLElement | null} */ (document.querySelector('.hero-foot'));
+const workHeading = /** @type {HTMLElement | null} */ (document.querySelector('#selected-work'));
 const header = /** @type {HTMLElement | null} */ (document.querySelector('.site-header'));
 const dock = /** @type {HTMLElement | null} */ (document.querySelector('.brand-dock'));
 const context = canvas?.getContext('2d'), miniContext = mini?.getContext('2d');
-if (canvas && mini && stage && art && hero && header && dock && context && miniContext) {
+if (canvas && mini && stage && art && hero && foot && workHeading && header && dock && context && miniContext) {
   const sphere = createSurface(), name = createNameSurface(sphere.length);
+  let sphereTop = Infinity, sphereBottom = -Infinity;
+  for (const point of projectSurface(sphere,INITIAL_YAW,INITIAL_PITCH)) {
+    sphereTop = Math.min(sphereTop,point.y); sphereBottom = Math.max(sphereBottom,point.y);
+  }
   // Stable buffers keep the scroll path free of per-particle object allocation.
   const projectedX = new Float64Array(sphere.length), projectedY = new Float64Array(sphere.length);
   const next = new Int32Array(sphere.length), first = new Int32Array(8), last = new Int32Array(8);
@@ -22,7 +28,7 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
   let visualProgress = 0, initialized = false, lastFrameTime = 0;
   let snapScrollY = null;
   let artX = 0, artY = 0, artSize = 0, start = 0, end = 1;
-  let targetX = 0, targetY = 0, targetScale = 1, canvasSize = 1, pixelRatio = 1;
+  let targetX = 0, targetY = 0, targetScale = 1, canvasSize = 1, pixelRatio = 1, headerEdge = 0;
   let projectedMorph = -1;
   const clamp = value => Math.max(0,Math.min(1,value));
   const ease = value => { const t = clamp(value); return t*t*(3-2*t); };
@@ -86,11 +92,24 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
     artX = rect.left+rect.width/2;
     artY = rect.top+window.scrollY+rect.height/2;
     artSize = rect.width;
-    // Mobile sees the complete orb before the transformation begins.
-    start = Math.max(0,rect.bottom+window.scrollY-window.innerHeight+24);
-    const heroEnd = hero.getBoundingClientRect().bottom+window.scrollY-header.getBoundingClientRect().height;
+    const headerRect = header.getBoundingClientRect();
+    const headerHeight = headerRect.height;
+    headerEdge = headerRect.bottom;
+    const sourceScale = artSize*0.345;
+    const fullyVisible = Math.max(0,artY+sphereBottom*sourceScale-window.innerHeight+24);
+    const latestVisible = Math.max(0,artY+sphereTop*sourceScale-headerHeight-16);
+    // In the stacked layout the role clears the header before the orb rises.
+    // Both the complete sphere and the arriving work remain in view.
+    const stacked = window.getComputedStyle(stage).position === 'relative';
+    const contentClear = stacked ? Math.max(0,foot.getBoundingClientRect().bottom+window.scrollY-headerHeight+16) : 0;
+    start = Math.max(fullyVisible,Math.min(contentClear,latestVisible));
+    const anchorMargin = parseFloat(window.getComputedStyle(workHeading).scrollMarginTop) || 0;
+    const scrollPadding = parseFloat(window.getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+    const readingInset = Math.max(headerHeight+24,anchorMargin+scrollPadding);
+    const workEntry = workHeading.getBoundingClientRect().top+window.scrollY-readingInset;
     const scrollLimit = Math.max(0,document.documentElement.scrollHeight-window.innerHeight);
-    end = Math.max(start+1,Math.min(heroEnd,scrollLimit));
+    end = Math.max(start+1,Math.min(workEntry,scrollLimit));
+    stage.dataset.fieldStart = String(start); stage.dataset.fieldEnd = String(end);
     const target = dock.getBoundingClientRect();
     targetX = target.left+target.width/2; targetY = target.top+target.height/2;
     targetScale = target.width/2.9;
@@ -130,10 +149,11 @@ if (canvas && mini && stage && art && hero && header && dock && context && miniC
       const settled = progress === targetProgress;
       if (docked && progress === 1 && !layoutChanged) return;
       const morph = ease(progress/0.62);
-      const travel = ease((progress-0.25)/0.75);
-      const handoff = ease((progress-0.78)/0.17);
+      const travel = ease(progress);
       const originY = artY-Math.min(window.scrollY,start);
       const x = artX+(targetX-artX)*travel, y = originY+(targetY-originY)*travel;
+      // Crossfade as the moving mark reaches the opaque header, at any size.
+      const handoff = ease((headerEdge+24-y)/36);
       const sourceScale = artSize*0.345;
       const scale = sourceScale+(targetScale-sourceScale)*travel;
       const radiusScale = Math.max(0.6,artSize/900)*(1-travel)+0.45*travel;

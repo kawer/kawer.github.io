@@ -1,6 +1,6 @@
 ---
-title: Evaluating agents that propose OS fixes
-description: Layered grading, source grounding, model selection, and empirical validation for code-optimization agents.
+title: Building the evaluation stack for OS engineering agents
+description: Evaluation infrastructure for agents investigating OS performance, power, reliability, and memory.
 status: published
 date: 2026-11-18
 featured: true

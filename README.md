@@ -29,6 +29,8 @@ node scripts/profile-orb.mjs http://127.0.0.1:4173 /tmp/orb-timing.json
 
 This optional Chromium benchmark warms both scroll directions, then reports visible-morph callback durations, frame spacing, and canvas pixel count at normal and fourfold CPU throttling. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an installed Chromium binary. Compare builds on the same idle machine; these local results do not measure real-user Core Web Vitals.
 
+When comparing versions with different handoff timing, sample the same active geometry phase. `ORB_PROFILE_MAX_PROGRESS=.55 ORB_PROFILE_PASS_MS=1800` limits samples to the first 55% of the morph and uses slower scroll passes. The report includes both settings. Hidden large-canvas frames are excluded.
+
 ## Content
 
 The site features two flagship case studies and supporting on-device/statistical work. Engineering Notes is temporarily withdrawn: its sources remain drafts, but the build generates no Writing or legacy blog routes. The original briefing, claim-review ledger, excluded details, and local review output remain gitignored under `.private/`.
