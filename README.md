@@ -2,6 +2,8 @@
 
 A static personal website for Lazaro Kawer. HTML is generated at build time from shared templates, verified biography data, and Markdown. The site uses plain HTML and CSS, with one small progressive enhancement for the homepage point cloud. It needs no application server, analytics, or external font services. Navigation and all content work without JavaScript.
 
+The visible landing sphere turns slowly with a small drift. Scroll input freezes its pose for the KAWER transition. Idle painting is capped and backs off on slower devices; it stops offscreen, during the morph, after docking, in hidden tabs, and with reduced motion enabled.
+
 ## Develop and review
 
 Use Node.js 22 or newer and Python 3 for the preview server.

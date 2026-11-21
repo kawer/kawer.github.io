@@ -221,11 +221,17 @@ async function assertDockBounds(page) {
   }
 }
 
-test('scroll artwork is decorative, control-free, and idle between native scroll events', async ({ page }) => {
+test('visible sphere rotates gently with a capped paint cadence and native scrolling', async ({ page }) => {
   await page.addInitScript(() => {
     const request = window.requestAnimationFrame.bind(window);
     window.__qaAnimationRequests = 0;
     window.requestAnimationFrame = callback => { window.__qaAnimationRequests++; return request(callback); };
+    const clear = CanvasRenderingContext2D.prototype.clearRect;
+    window.__qaOrbPaints = 0;
+    CanvasRenderingContext2D.prototype.clearRect = function(...args) {
+      if (this.canvas.id === 'field-canvas') window.__qaOrbPaints++;
+      return clear.apply(this,args);
+    };
   });
   await readyField(page);
   const canvas = page.locator('#field-canvas');
@@ -236,12 +242,16 @@ test('scroll artwork is decorative, control-free, and idle between native scroll
   expect(await canvas.evaluate(element => getComputedStyle(element).pointerEvents)).toBe('none');
   expect(await canvas.evaluate(element => getComputedStyle(element).position)).toBe('fixed');
   await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state', 'sphere');
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-idle', 'true');
   await page.waitForTimeout(140);
   const image = await canvasDigest(canvas);
-  const requests = await page.evaluate(() => window.__qaAnimationRequests);
-  await page.waitForTimeout(180);
-  expect(await canvasDigest(canvas)).toBe(image);
-  expect(await page.evaluate(() => window.__qaAnimationRequests)).toBeLessThanOrEqual(requests + 1);
+  const before = await page.evaluate(() => ({requests:window.__qaAnimationRequests,paints:window.__qaOrbPaints,time:performance.now()}));
+  await page.waitForTimeout(450);
+  expect(await canvasDigest(canvas)).not.toBe(image);
+  const after = await page.evaluate(time => ({requests:window.__qaAnimationRequests,paints:window.__qaOrbPaints,elapsed:performance.now()-time}),before.time);
+  expect(after.paints).toBeGreaterThan(before.paints);
+  expect(after.paints-before.paints).toBeLessThanOrEqual(Math.ceil(after.elapsed*24/1000)+2);
+  expect(after.requests-before.requests).toBeLessThanOrEqual(Math.ceil(after.elapsed*24/1000)+3);
   await page.mouse.move(300, 350);
   await page.mouse.wheel(0, 180);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
@@ -281,7 +291,8 @@ test('scroll morph reverses deterministically and docks a tappable native brand'
   await nativeScroll(page, middle);
   expect(await canvasDigest(canvas)).toBe(halfway);
   await nativeScroll(page, 0);
-  expect(await canvasDigest(canvas)).toBe(original);
+  await expect(stage).toHaveAttribute('data-field-state','sphere');
+  await expect(stage).toHaveAttribute('data-field-idle','true');
   await nativeScroll(page, end + 40);
   const dock = await page.locator('.brand-dock').boundingBox();
   const x = dock.x + dock.width / 2, y = dock.y + dock.height / 2;
@@ -290,6 +301,94 @@ test('scroll morph reverses deterministically and docks a tappable native brand'
   else await page.mouse.click(x, y);
   await expect(page).toHaveURL('http://127.0.0.1:4173/');
   await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(1);
+});
+
+test('idle motion pauses outside the visible sphere and preserves its pose through morphing', async ({ page }) => {
+  test.setTimeout(60000);
+  await page.clock.install();
+  await page.addInitScript(() => {
+    const clear = CanvasRenderingContext2D.prototype.clearRect;
+    window.__qaOrbPaints = 0;
+    CanvasRenderingContext2D.prototype.clearRect = function(...args) {
+      if (this.canvas.id === 'field-canvas') window.__qaOrbPaints++;
+      return clear.apply(this,args);
+    };
+  });
+  await readyField(page);
+  const stage = page.locator('.field-stage'), canvas = page.locator('#field-canvas');
+  await expect(stage).toHaveAttribute('data-field-idle','true');
+  await page.clock.pauseAt(await page.evaluate(()=>Date.now()+60000));
+  // Exercise the wrapped angle after a long idle, not only its initial pose.
+  await page.clock.runFor(51000);
+  const pose = await canvasDigest(canvas);
+  await page.evaluate(() => {
+    window.__qaHidden = true;
+    Object.defineProperty(document,'hidden',{configurable:true,get:()=>window.__qaHidden});
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const hiddenPaints = await page.evaluate(()=>window.__qaOrbPaints);
+  await page.clock.runFor(10000);
+  expect(await page.evaluate(()=>window.__qaOrbPaints)).toBe(hiddenPaints);
+  expect(await canvasDigest(canvas)).toBe(pose);
+  await page.evaluate(()=>{window.__qaHidden=false;document.dispatchEvent(new Event('visibilitychange'));});
+  await page.clock.runFor(16);
+  expect(await canvasDigest(canvas)).toBe(pose);
+  await page.clock.runFor(200);
+  expect(await canvasDigest(canvas)).not.toBe(pose);
+  const metrics = await stage.evaluate(node=>({start:Number(node.dataset.fieldStart),end:Number(node.dataset.fieldEnd)}));
+  const scroll = async fraction => {
+    const target = await page.evaluate(({metrics,fraction})=>{
+      const target = Math.round(metrics.start+(metrics.end-metrics.start)*fraction);
+      scrollTo({top:target,behavior:'instant'});
+      return target;
+    },{metrics,fraction});
+    await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(target);
+    // Native scroll events use the browser's real frame queue; explicitly
+    // deliver one before advancing the paused test clock's animation frames.
+    await page.evaluate(()=>window.dispatchEvent(new Event('scroll')));
+    await page.clock.runFor(1200);
+    await expect(stage).toHaveAttribute('data-field-settled','true');
+    const expected = Math.max(0,Math.min(1,(target-metrics.start)/(metrics.end-metrics.start)));
+    expect(Math.abs(await progress(page)-expected)).toBeLessThan(.002);
+  };
+  await scroll(.45);
+  await expect(stage).toHaveAttribute('data-field-idle','false');
+  const middle = await canvasDigest(canvas), middlePaints = await page.evaluate(()=>window.__qaOrbPaints);
+  await page.clock.runFor(5000);
+  expect(await page.evaluate(()=>window.__qaOrbPaints)).toBe(middlePaints);
+  expect(await canvasDigest(canvas)).toBe(middle);
+  await scroll(1);
+  await expect(stage).toHaveAttribute('data-field-state','docked');
+  const dockedPaints = await page.evaluate(()=>window.__qaOrbPaints);
+  await page.clock.runFor(5000);
+  expect(await page.evaluate(()=>window.__qaOrbPaints)).toBe(dockedPaints);
+  await scroll(.45);
+  expect(await canvasDigest(canvas)).toBe(middle);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await expect.poll(async()=>{
+    await page.clock.runFor(64);
+    return stage.getAttribute('data-field-state');
+  }).toBe('static');
+  const reducedPaints = await page.evaluate(()=>window.__qaOrbPaints);
+  await page.clock.runFor(5000);
+  expect(await page.evaluate(()=>window.__qaOrbPaints)).toBe(reducedPaints);
+  await page.evaluate(()=>scrollTo({top:0,behavior:'instant'}));
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await expect.poll(async()=>{
+    await page.clock.runFor(200);
+    return stage.getAttribute('data-field-idle');
+  }).toBe('true');
+  await page.setViewportSize({width:390,height:300});
+  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await page.clock.runFor(100);
+  await expect(stage).toHaveAttribute('data-field-idle','false');
+  const offscreenPaints = await page.evaluate(()=>window.__qaOrbPaints);
+  await page.clock.runFor(5000);
+  expect(await page.evaluate(()=>window.__qaOrbPaints)).toBe(offscreenPaints);
+  await page.setViewportSize({width:390,height:844});
+  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await page.clock.runFor(1000);
+  await expect(stage).toHaveAttribute('data-field-idle','true');
 });
 
 test('fast scroll jumps animate through intermediate shapes and dock on tall screens', async ({ page }, testInfo) => {
