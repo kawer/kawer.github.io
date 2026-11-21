@@ -1,5 +1,17 @@
 # Validation
 
+## Visible idle rotation
+
+The visible sphere now rotates in 3D while retaining the original particle count and optimized drawing path. Focused tests check a real pixel change at a capped paint cadence and a long idle period that crosses the wrapped-yaw boundary. A controlled clock exercises hidden-tab suspension, pose-preserving resumption, a frozen partial morph, full docking, reverse-morph pixel equality, reduced motion, and an initially offscreen sphere.
+
+The former initial-sphere pixel-equality assertion is superseded by the requested live motion. Deterministic comparison remains meaningful within a frozen morph pose: returning from the dock to the same scroll offset reproduces identical pixels before idle resumes. Native scroll and media notifications are synchronized separately from the controlled timer clock in these tests.
+
+Lint, type checking, build, eleven Node cases, and all 54 desktop/mobile Chromium cases pass locally, with zero violations across twenty-two axe scans. An independent single-browser review passed five viewport sizes, legacy motion APIs, missing ResizeObserver, full-sphere bounds, text-pixel clearance, and frozen-pose reversal. Fourteen inactive pause windows produced no paints. Actual Safari/Firefox rendering was not exercised.
+
+Serial Chromium 156 comparisons against `8b26bcb` used 1440×1000 at DPR 2, two warm passes and four measured 1800ms passes, restricted to active morph progress below .55. Scroll callback median/p95 was 2.3/2.9ms before and 2.3/2.7ms after (269/272 samples); with fourfold CPU throttling it was 11.5/14.0ms and 10.4/13.0ms (79/79 samples). Canvas backing pixels remain 1,790,244. In separate three-second visible-idle windows, desktop/mobile painted at about 20 paints/second with a 2.3–2.4ms median callback. Fourfold throttling reduced idle painting to about 9 paints/second, demonstrating the cost-based backoff. These are local observations, not field Core Web Vitals or device frame-rate guarantees.
+
+Review artifacts, timing reports, and preview videos are kept under `/workspace/artifacts/living-orb`, outside `dist/`. No professional content, résumé, case-study ordering, or runtime dependencies are changed. Earlier sections describe previous releases.
+
 ## Work enters during the orb transition
 
 New browser coverage samples the morph at .25, .45, and .75 on 320×740 and 390×844 portrait, 1440×1000 desktop, and 844×390 landscape. It checks work arrival and reads the canvas's actual alpha pixels against visible text-line rectangles, excluding the area masked by the opaque header. This catches the original role/artwork collision as well as overlap with arriving work headings. Existing tests continue to cover full-sphere visibility before transformation, complete docking on tall screens, deterministic reversal, native links and gestures, reload/resize restoration, reduced-motion and no-JavaScript fallbacks, finite settling, bounded drawing, and zero idle rendering.

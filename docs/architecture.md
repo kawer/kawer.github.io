@@ -1,5 +1,13 @@
 # Architecture and review decisions
 
+## Visible idle rotation
+
+Restore the original slow 3D turn at 0.065 radians/second, with a small pitch change and at most 2.5px vertical drift. The sphere still uses all 8,910 original particles and the packed projection/depth-band buffers. Projection caching now includes yaw and pitch as well as morph progress. Initial fit calculations use a conservative perspective envelope for every rotation plus drift padding.
+
+Only the visible, unmorphed, stationary sphere schedules idle work. One timeout requests a paint through the existing coalesced animation-frame queue, capped at 24fps and backed off using measured render cost on slower devices. Scroll input cancels that timeout immediately; scroll interpolation keeps its normal animation-frame cadence. A short quiet period prevents idle painting from competing with ongoing native scrolling before the morph begins. Nothing continues scheduling idle frames offscreen, in a hidden document, during a settled partial morph, after docking, or under reduced motion.
+
+The active-time clock freezes rather than catching up after suspension. Scroll/morph frames use the last displayed pose, smoothly bringing its wrapped yaw and pitch to the front-facing lettering and fading the small drift. Reversing to the sphere resumes that same pose before rotation continues. The miniature wordmark remains still. There are no new controls, pointer handlers, dependencies, asset types, or runtime services. The static SVG and native links remain the fallback. Earlier sections describe the previous releases, including the superseded no-idle-loop behavior.
+
 ## Work enters during the orb transition
 
 Implement the selected “Work moves in” direction with normal document flow. The homepage hero is shorter; stacked portrait and short landscape layouts place the role and section link above the artwork. Compact stage spacing keeps the sphere prominent while bringing the work section closer. Work links remain ordinary visible anchors. There is no extra trail, section transform, concealed content, or synthetic scroll distance.
