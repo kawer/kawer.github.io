@@ -258,6 +258,192 @@ test('visible sphere rotates gently with a capped paint cadence and native scrol
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
 });
 
+test('fine-pointer pocket stays local, releases, and hands off to native scroll', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'The fine-pointer comparison uses the desktop mouse');
+  await page.clock.install();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now()+1000));
+  const idle = await page.context().newPage();
+  const runs = [page, idle];
+  await Promise.all(runs.map(async run => {
+    await run.addInitScript(() => {
+      // Compare the coordinates sent to the real canvas in stable depth-band order.
+      const { clearRect, arc } = CanvasRenderingContext2D.prototype;
+      window.__qaPocket = { dots: [], paints: 0 };
+      CanvasRenderingContext2D.prototype.clearRect = function(...args) {
+        if (this.canvas.id === 'field-canvas') {
+          window.__qaPocket.dots.length = 0;
+          window.__qaPocket.paints++;
+        }
+        return clearRect.apply(this,args);
+      };
+      CanvasRenderingContext2D.prototype.arc = function(x,y,...args) {
+        if (this.canvas.id === 'field-canvas') window.__qaPocket.dots.push(x,y);
+        return arc.call(this,x,y,...args);
+      };
+    });
+    await run.goto('/');
+    await run.evaluate(async () => {
+      await document.fonts.ready;
+      // Let real layout observers deliver their initial measurements before ticking.
+      await new Promise(resolve => {
+        const observer = new ResizeObserver(() => { observer.disconnect(); resolve(); });
+        observer.observe(document.querySelector('.field-art'));
+      });
+    });
+  }));
+  const advance = ms => page.clock.runFor(ms);
+  await advance(224);
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-idle','true');
+  expect(await page.evaluate(() => matchMedia('(any-pointer: fine)').matches)).toBe(true);
+  const pointer = await page.locator('.field-art').evaluate(art => {
+    const { left, top, width, height } = art.getBoundingClientRect();
+    return { x: Math.round(left+width/2), y: Math.round(top+height/2) };
+  });
+  const readPaint = run => run.evaluate(() => {
+    const { left, top } = document.querySelector('#field-canvas').getBoundingClientRect();
+    return { ...window.__qaPocket, left, top };
+  });
+  async function compare() {
+    const [active, baseline] = await Promise.all(runs.map(readPaint));
+    expect(active.dots.length).toBe(baseline.dots.length);
+    expect(active.dots.length).toBeGreaterThan(0);
+    let peak = 0, outward = 0, inward = 0, distant = 0;
+    for (let i=0; i<active.dots.length; i+=2) {
+      const x = baseline.dots[i]+baseline.left-pointer.x;
+      const y = baseline.dots[i+1]+baseline.top-pointer.y;
+      const dx = active.dots[i]+active.left-baseline.left-baseline.dots[i];
+      const dy = active.dots[i+1]+active.top-baseline.top-baseline.dots[i+1];
+      const change = Math.hypot(dx,dy);
+      const distance = Math.hypot(x,y);
+      peak = Math.max(peak,change);
+      if (distance > 72) distant = Math.max(distant,change);
+      if (change > 1 && distance < 40) {
+        if (x*dx+y*dy > 0) outward++;
+        else inward++;
+      }
+    }
+    return { peak, outward, inward, distant, paints: active.paints };
+  }
+  const assertPocket = sample => {
+    expect(sample.peak).toBeGreaterThan(16);
+    expect(sample.outward).toBeGreaterThan(20);
+    expect(sample.inward).toBe(0);
+    expect(sample.distant).toBeLessThan(.001);
+  };
+  await page.mouse.move(8,8);
+  await advance(100);
+  expect((await compare()).peak).toBeLessThan(.001);
+  await page.mouse.move(pointer.x,pointer.y);
+  await advance(100);
+  const approach = await compare();
+  assertPocket(approach);
+  const firstPose = await readPaint(page);
+  await advance(250);
+  assertPocket(await compare());
+  expect((await readPaint(page)).dots).not.toEqual(firstPose.dots);
+
+  const beforeBurst = (await compare()).paints;
+  await page.evaluate(({ x, y }) => {
+    for (let i=0; i<200; i++) {
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        pointerType:'mouse', pointerId:1, isPrimary:true, clientX:x+(i+1)%10, clientY:y,
+      }));
+    }
+  },pointer);
+  expect((await compare()).paints).toBe(beforeBurst);
+  await advance(180);
+  expect((await compare()).paints-beforeBurst).toBeLessThanOrEqual(5);
+  assertPocket(await compare());
+  await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerout',{pointerId:1})));
+  await advance(90);
+  const releasing = (await compare()).peak;
+  expect(releasing).toBeGreaterThan(1);
+  expect(releasing).toBeLessThan(approach.peak);
+  await advance(64);
+  expect((await compare()).peak).toBeLessThan(releasing);
+  await advance(160);
+  expect((await compare()).peak).toBeLessThan(.001);
+
+  // A fast in-page move to an empty corner should also leave a brief recovery.
+  const artWidth = await page.locator('.field-art').evaluate(art => art.getBoundingClientRect().width);
+  const diagonal = Math.round(artWidth*.265);
+  const corner = Math.round(artWidth*.356);
+  await page.mouse.move(pointer.x+diagonal,pointer.y+diagonal);
+  await advance(200);
+  const nearEdge = (await compare()).peak;
+  expect(nearEdge).toBeGreaterThan(16);
+  await page.mouse.move(pointer.x+corner,pointer.y+corner);
+  await advance(48);
+  const residual = (await compare()).peak;
+  expect(residual).toBeGreaterThan(1);
+  expect(residual).toBeLessThan(nearEdge);
+  await advance(400);
+  expect((await compare()).peak).toBeLessThan(.001);
+
+  await page.evaluate(({ x, y }) => window.dispatchEvent(new PointerEvent('pointermove',{
+    pointerType:'touch', pointerId:2, isPrimary:true, clientX:x, clientY:y,
+  })),pointer);
+  await advance(100);
+  expect((await compare()).peak).toBeLessThan(.001);
+  for (const event of ['pointercancel','blur','resize','pageshow','visibilitychange']) {
+    await page.mouse.move(pointer.x+2,pointer.y);
+    await page.mouse.move(pointer.x,pointer.y);
+    await advance(100);
+    assertPocket(await compare());
+    await Promise.all(runs.map(run => run.evaluate(event => {
+      if (event === 'visibilitychange') {
+        Object.defineProperty(document,'hidden',{configurable:true,value:true});
+        document.dispatchEvent(new Event(event));
+        delete document.hidden;
+        document.dispatchEvent(new Event(event));
+      } else if (event === 'pointercancel') {
+        window.dispatchEvent(new PointerEvent(event,{pointerId:1}));
+      } else window.dispatchEvent(new Event(event));
+    },event)));
+    await advance(300);
+    expect((await compare()).peak,event).toBeLessThan(.001);
+  }
+
+  const scroll = fraction => Promise.all(runs.map(run => run.evaluate(fraction => new Promise(resolve => {
+    const { fieldStart, fieldEnd } = document.querySelector('.field-stage').dataset;
+    const start = Number(fieldStart), end = Number(fieldEnd);
+    const target = fraction === 1 ? Math.ceil(end) : Math.round(start+(end-start)*fraction);
+    // The browser delivers scroll events while the test clock is paused.
+    window.addEventListener('scroll',() => resolve(),{once:true});
+    scrollTo({top:target,behavior:'instant'});
+  }),fraction)));
+  await page.mouse.move(pointer.x+2,pointer.y);
+  await page.mouse.move(pointer.x,pointer.y);
+  await advance(100);
+  const deformed = (await compare()).peak;
+  expect(deformed).toBeGreaterThan(16);
+  await scroll(.004);
+  await advance(16);
+  expect(await progress(page)).toBeGreaterThan(0);
+  expect((await compare()).peak).toBeGreaterThan(deformed*.65);
+  await scroll(.04);
+  await advance(16);
+  expect((await compare()).peak).toBeGreaterThan(deformed*.65);
+  await scroll(.003);
+  await advance(900);
+  expect((await compare()).peak).toBeLessThan(.001);
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-settled','true');
+  await scroll(.45);
+  await advance(900);
+  expect((await compare()).peak).toBeLessThan(.001);
+  const middle = await canvasDigest(page.locator('#field-canvas'));
+  await scroll(1);
+  await advance(900);
+  await expect(page.locator('#field-canvas')).toBeHidden();
+  expect(await canvasDigest(page.locator('#brand-canvas'))).toBe(await canvasDigest(idle.locator('#brand-canvas')));
+  await scroll(.45);
+  await advance(900);
+  expect(await canvasDigest(page.locator('#field-canvas'))).toBe(middle);
+  await scroll(0);
+  await advance(900);
+  expect((await compare()).peak).toBeLessThan(.001);
+});
+
 test('scroll morph reverses deterministically and docks a tappable native brand', async ({ page }, testInfo) => {
   await readyField(page);
   const stage = page.locator('.field-stage');
