@@ -18,12 +18,17 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   const sphereExtent = sphereRadius / Math.sqrt(1-(sphereRadius/3.8)**2);
   // Stable buffers keep the scroll path free of per-particle object allocation.
   const projectedX = new Float64Array(sphere.length), projectedY = new Float64Array(sphere.length);
+  const offsetX = new Float32Array(sphere.length), offsetY = new Float32Array(sphere.length);
   const next = new Int32Array(sphere.length), first = new Int32Array(8), last = new Int32Array(8);
   // A convex morph and rotation cannot exceed either endpoint's radius. This
   // perspective bound contains every intermediate shape, including its dots.
   const radius = Math.max(...sphere.map(point=>Math.hypot(point.x,point.y,point.z)),...name.map(point=>Math.hypot(point.x,point.y,point.z)));
   const projectedRadius = radius / Math.sqrt(1-(radius/3.8)**2);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const finePointer = matchMedia('(any-pointer: fine)');
+  const pocketRadius = 68, pocketPush = 24, releaseDuration = 180;
+  let pointerId = null, pointerX = 0, pointerY = 0, pointerReady = false;
+  let offsetWeight = 0, releaseAt = null;
   let frame = 0, measureNeeded = true, docked = false;
   let visualProgress = 0, initialized = false, lastFrameTime = 0;
   let idleTimer = 0, idleTime = 0, idleLastTime = 0, lastScrollAt = -Infinity, idleCost = 3;
@@ -75,17 +80,70 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
     }
     projectedMorph = morph; projectedYaw = yaw; projectedPitch = pitch;
   }
-  function paintField(x, y, scale, radiusScale, opacity) {
+  function paintField(x, y, scale, radiusScale, opacity, livePointer, localPointerX, localPointerY, pointerBlend) {
+    const retainedWeight = offsetWeight*(1-pointerBlend);
+    const displayWeight = livePointer ? 1 : offsetWeight;
+    let hasOffsets = false;
     for (let band=0;band<8;band++) {
       context.fillStyle = `rgba(35,92,219,${(0.14+band*0.115)*opacity})`;
       context.beginPath();
       const radius = (0.6+band*0.13)*radiusScale;
       for (let index=first[band];index!==-1;index=next[index]) {
-        const px = x+projectedX[index]*scale, py = y+projectedY[index]*scale;
+        let px = x+projectedX[index]*scale, py = y+projectedY[index]*scale;
+        if (livePointer) {
+          const dx = px-localPointerX, dy = py-localPointerY;
+          const distanceSquared = dx*dx+dy*dy;
+          let push = 0;
+          if (distanceSquared < pocketRadius*pocketRadius) {
+            const distance = Math.sqrt(distanceSquared);
+            push = pocketPush*(1-ease(distance/pocketRadius))/Math.max(8,distance);
+            // Bound the push along its original direction inside the existing canvas.
+            if (dx) push = Math.min(push,Math.max(0,(dx > 0 ? canvasSize-radius-px : radius-px)/dx));
+            if (dy) push = Math.min(push,Math.max(0,(dy > 0 ? canvasSize-radius-py : radius-py)/dy));
+          }
+          push *= pointerBlend;
+          const nextX = dx*push+offsetX[index]*retainedWeight;
+          const nextY = dy*push+offsetY[index]*retainedWeight;
+          // Dots just outside the moving pocket also need time to settle.
+          const displaced = Math.abs(nextX)+Math.abs(nextY) >= .1;
+          offsetX[index] = displaced ? nextX : 0;
+          offsetY[index] = displaced ? nextY : 0;
+          hasOffsets ||= displaced;
+        }
+        if (displayWeight && (offsetX[index] || offsetY[index])) {
+          px += Math.max(Math.min(0,radius-px),Math.min(Math.max(0,canvasSize-radius-px),offsetX[index]*displayWeight));
+          py += Math.max(Math.min(0,radius-py),Math.min(Math.max(0,canvasSize-radius-py),offsetY[index]*displayWeight));
+        }
         context.moveTo(px+radius,py); context.arc(px,py,radius,0,Math.PI*2);
       }
       context.fill();
     }
+    if (livePointer) offsetWeight = Number(hasOffsets);
+  }
+  function resetPointer() {
+    pointerId = null;
+    pointerReady = false;
+    offsetWeight = 0;
+    releaseAt = null;
+  }
+  function updatePointer(now, resting, progress, targetProgress, x, y, extent) {
+    pointerReady = resting;
+    if (progress === 0 && targetProgress === 0 && !resting) {
+      resetPointer();
+      return false;
+    }
+    const live = resting && pointerId !== null && pointerY >= headerEdge
+      && Math.abs(pointerX-x) < extent+pocketRadius && Math.abs(pointerY-y) < extent+pocketRadius;
+    if (live) {
+      releaseAt = null;
+    } else if (offsetWeight) {
+      if (releaseAt === null) releaseAt = now;
+      // Fade the displayed offsets over time or as the orb enters the morph.
+      // Keep the fade moving in one direction even when scrolling reverses.
+      offsetWeight = Math.min(offsetWeight,1-ease(Math.max(progress/.18,(now-releaseAt)/releaseDuration)));
+    }
+    if (!resting) pointerId = null;
+    return live;
   }
   function measure() {
     const rect = art.getBoundingClientRect();
@@ -127,6 +185,7 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   }
   function staticFallback() {
     cancelIdle(true);
+    resetPointer();
     canvas.hidden = true; mini.hidden = true;
     delete stage.dataset.fieldReady;
     stage.dataset.fieldState = 'static'; stage.dataset.fieldProgress = '0'; stage.dataset.fieldSettled = 'true';
@@ -137,25 +196,25 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   function render(now = performance.now()) {
     frame = 0;
     const frameStarted = performance.now();
-    if (document.hidden) { cancelIdle(true); return; }
+    if (document.hidden) { cancelIdle(true); resetPointer(); return; }
     if (reducedMotion.matches) { staticFallback(); return; }
     try {
       const layoutChanged = measureNeeded;
       if (measureNeeded) measure();
       const targetProgress = clamp((window.scrollY-start)/(end-start));
       const shouldSnap = snapScrollY !== null && snapScrollY === window.scrollY;
+      const elapsed = now-lastFrameTime;
       snapScrollY = null;
       if (!initialized || shouldSnap) {
         visualProgress = targetProgress;
         initialized = true;
       } else {
-        const elapsed = Math.max(1,Math.min(32,now-lastFrameTime));
-        visualProgress += (targetProgress-visualProgress)*(1-Math.exp(-elapsed/65));
+        const scrollElapsed = Math.max(1,Math.min(32,elapsed));
+        visualProgress += (targetProgress-visualProgress)*(1-Math.exp(-scrollElapsed/65));
         if (Math.abs(targetProgress-visualProgress) < 0.0001) visualProgress = targetProgress;
       }
       lastFrameTime = now;
       const progress = visualProgress;
-      const settled = progress === targetProgress;
       if (docked && progress === 1 && !layoutChanged) return;
       const originY = artY-Math.min(window.scrollY,start);
       const extent = sphereExtent*artSize*0.345+3;
@@ -175,6 +234,7 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
       const y = originY+(targetY-originY)*travel+Math.sin(idleTime*.00031)*2.5*idleWeight;
       // Crossfade as the moving mark reaches the opaque header, at any size.
       const handoff = ease((headerEdge+24-y)/36);
+      const livePointer = updatePointer(now,resting && handoff < 1,progress,targetProgress,x,y,extent);
       const sourceScale = artSize*0.345;
       const scale = sourceScale+(targetScale-sourceScale)*travel;
       const radiusScale = Math.max(0.6,artSize/900)*(1-travel)+0.45*travel;
@@ -185,8 +245,10 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
         const top = Math.floor((y-canvasSize/2)*pixelRatio)/pixelRatio;
         canvas.style.transform = `translate(${left}px,${top}px)`;
         fit(canvas,context,canvasSize,canvasSize);
-        paintField(x-left,y-top,scale,radiusScale,1-handoff);
+        const pointerBlend = livePointer ? 1-Math.exp(-Math.max(1,elapsed)/42) : 0;
+        paintField(x-left,y-top,scale,radiusScale,1-handoff,livePointer,pointerX-left,pointerY-top,pointerBlend);
       }
+      const settled = progress === targetProgress && (resting || offsetWeight === 0);
       header.style.setProperty('--dock-opacity',String(handoff));
       canvas.hidden = handoff === 1; mini.hidden = false;
       stage.dataset.fieldReady = 'true'; stage.dataset.fieldProgress = progress.toFixed(5);
@@ -213,14 +275,34 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   // Move outside transformed artwork ancestors so viewport coordinates stay exact.
   canvas.classList.add('scroll-field');
   document.body.append(canvas);
+  // Pointer input only replaces the latest sample. The idle timer owns its paints.
+  window.addEventListener('pointermove',event=>{
+    if (!pointerReady || !finePointer.matches || !event.isPrimary
+      || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
+    pointerId = event.pointerId;
+    pointerX = event.clientX; pointerY = event.clientY;
+  },{passive:true});
+  window.addEventListener('pointerout',event=>{
+    if (event.relatedTarget === null && event.pointerId === pointerId) pointerId = null;
+  },{passive:true});
+  window.addEventListener('pointercancel',event=>{
+    if (event.pointerId === pointerId) pointerId = null;
+  },{passive:true});
+  window.addEventListener('blur',()=>{ pointerId = null; });
   window.addEventListener('scroll',()=>{ lastScrollAt = performance.now(); cancelIdle(true); queue(); },{passive:true});
-  window.addEventListener('resize',()=>queue(true,true),{passive:true});
-  window.addEventListener('pageshow',event=>queue(true,event.persisted));
-  window.visualViewport?.addEventListener('resize',()=>queue(true,true),{passive:true});
-  const motionChanged = () => queue(true);
+  const viewportChanged = () => { resetPointer(); queue(true,true); };
+  window.addEventListener('resize',viewportChanged,{passive:true});
+  window.addEventListener('pagehide',resetPointer);
+  window.addEventListener('pageshow',event=>{ resetPointer(); queue(true,event.persisted); });
+  window.visualViewport?.addEventListener('resize',viewportChanged,{passive:true});
+  const motionChanged = () => { resetPointer(); queue(true); };
   if (typeof reducedMotion.addEventListener === 'function') reducedMotion.addEventListener('change',motionChanged);
   else if (typeof reducedMotion.addListener === 'function') reducedMotion.addListener(motionChanged);
+  const pointerChanged = () => { pointerId = null; };
+  if (typeof finePointer.addEventListener === 'function') finePointer.addEventListener('change',pointerChanged);
+  else if (typeof finePointer.addListener === 'function') finePointer.addListener(pointerChanged);
   document.addEventListener('visibilitychange',()=>{
+    resetPointer();
     if (document.hidden) { cancelAnimationFrame(frame); frame=0; cancelIdle(true); }
     else queue(true,true);
   });
