@@ -565,7 +565,14 @@ test('idle motion pauses outside the visible sphere and preserves its pose throu
     return stage.getAttribute('data-field-idle');
   }).toBe('true');
   await page.setViewportSize({width:390,height:300});
-  await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
+  await page.evaluate(async () => {
+    // Native layout notifications run independently of the paused test clock.
+    await new Promise(resolve => {
+      const observer = new ResizeObserver(() => { observer.disconnect(); resolve(); });
+      observer.observe(document.querySelector('.field-art'));
+    });
+    window.dispatchEvent(new Event('resize'));
+  });
   await page.clock.runFor(100);
   await expect(stage).toHaveAttribute('data-field-idle','false');
   const offscreenPaints = await page.evaluate(()=>window.__qaOrbPaints);
