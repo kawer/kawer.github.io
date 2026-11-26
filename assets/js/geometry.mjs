@@ -69,8 +69,8 @@ const WOBBLE_FADE_START = .22;
 const CONTACT_RADIUS = .41, CONTACT_SPREAD = .58, CONTACT_CORE = .105, CONTACT_CURVE = .7;
 const SIDE_SPREAD = .22, SIDE_CORE_REDUCTION = .035, OUTWARD_RESTRAINT = .35;
 const DENT_WIDTH = .72, DENT_FALLOFF = .68, CENTER_COMPRESSION = .225;
-const WOBBLE_RATE = .018, WOBBLE_DECAY = .0066, WOBBLE_LIMIT = .17;
-const WOBBLE_BEND = .42;
+const WOBBLE_RATE = .017, WOBBLE_DECAY = .0051, WOBBLE_LIMIT = .17;
+const WOBBLE_LAG = 80, WOBBLE_BEND = .30;
 export const clampUnit = value => Math.max(0,Math.min(1,value));
 export const smoothUnit = value => { const t = clampUnit(value); return t*t*(3-2*t); };
 
@@ -132,24 +132,40 @@ export function dropletPose(state, progress, extent, pose) {
 }
 
 export function createWobble() {
-  return { x:0,y:0,vx:0,vy:0 };
+  return { x:0,y:0,vx:0,vy:0,middleX:0,middleY:0,tailX:0,tailY:0,axisX:0,axisY:0 };
 }
 
 export function resetWobble(wobble) {
   wobble.x = wobble.y = wobble.vx = wobble.vy = 0;
+  wobble.middleX = wobble.middleY = wobble.tailX = wobble.tailY = 0;
+  wobble.axisX = wobble.axisY = 0;
 }
 
-export function kickWobble(wobble, x, y) {
+export function wobbleIsActive(wobble) {
+  return wobble.axisX !== 0 || wobble.axisY !== 0;
+}
+
+export function kickWobble(wobble, x, y, axisX = x, axisY = y) {
+  if (!wobbleIsActive(wobble)) {
+    const length = Math.hypot(axisX,axisY);
+    if (!length) return;
+    wobble.axisX = axisX/length;
+    wobble.axisY = axisY/length;
+  }
   wobble.x += x*.06;
   wobble.y += y*.06;
   wobble.vx = wobble.vx*.6+x*.024;
   wobble.vy = wobble.vy*.6+y*.024;
 }
 
-// Evaluate the damped spring directly so its rhythm is independent of frame rate.
 export function stepWobble(wobble, elapsed) {
-  if (!wobble.x && !wobble.y && !wobble.vx && !wobble.vy) return;
-  const time = Math.max(0,elapsed);
+  const time = Math.min(1400,Math.max(0,elapsed));
+  const steps = Math.ceil(time/32);
+  for (let i=0;i<steps && wobbleIsActive(wobble);i++) advanceWobble(wobble,time/steps);
+}
+
+// Evaluate the damped spring directly, then pass its displacement down the surface.
+function advanceWobble(wobble, time) {
   const decay = Math.exp(-WOBBLE_DECAY*time);
   const cos = Math.cos(WOBBLE_RATE*time), sin = Math.sin(WOBBLE_RATE*time);
   const x = wobble.x, y = wobble.y;
@@ -159,35 +175,49 @@ export function stepWobble(wobble, elapsed) {
   wobble.y = decay*(y*cos+my*sin);
   wobble.vx = decay*(wobble.vx*cos-(WOBBLE_RATE*x+WOBBLE_DECAY*mx)*sin);
   wobble.vy = decay*(wobble.vy*cos-(WOBBLE_RATE*y+WOBBLE_DECAY*my)*sin);
-  if (Math.hypot(wobble.x,wobble.y,wobble.vx/WOBBLE_RATE,wobble.vy/WOBBLE_RATE) < .0013) resetWobble(wobble);
+  // The middle follows the leading rim, and the opposite rim follows the middle.
+  const lag = Math.exp(-time/WOBBLE_LAG);
+  const targetX = (x+wobble.x)*.5, targetY = (y+wobble.y)*.5;
+  const errorX = wobble.middleX-targetX, errorY = wobble.middleY-targetY;
+  wobble.tailX = targetX+(wobble.tailX-targetX+errorX*time/WOBBLE_LAG)*lag;
+  wobble.tailY = targetY+(wobble.tailY-targetY+errorY*time/WOBBLE_LAG)*lag;
+  wobble.middleX = targetX+errorX*lag;
+  wobble.middleY = targetY+errorY*lag;
+  if (Math.hypot(wobble.x,wobble.y,wobble.vx/WOBBLE_RATE,wobble.vy/WOBBLE_RATE,
+    wobble.middleX,wobble.middleY,wobble.tailX,wobble.tailY) < .0013) resetWobble(wobble);
+}
+
+export function createWavePose() {
+  return { x:0,y:0,middleX:0,middleY:0,tailX:0,tailY:0,axisX:0,axisY:0 };
+}
+
+function wavePeak(wave) {
+  return Math.max(Math.hypot(wave.x,wave.y),Math.hypot(wave.middleX,wave.middleY),Math.hypot(wave.tailX,wave.tailY));
+}
+
+function writeWave(wave, weight, output) {
+  output.x = wave.x*weight; output.y = wave.y*weight;
+  output.middleX = wave.middleX*weight; output.middleY = wave.middleY*weight;
+  output.tailX = wave.tailX*weight; output.tailY = wave.tailY*weight;
+  output.axisX = weight ? wave.axisX : 0; output.axisY = weight ? wave.axisY : 0;
 }
 
 export function wobblePose(pointer, scroll, progress, pose) {
-  const x = pointer.x+scroll.x, y = pointer.y+scroll.y;
-  const magnitude = Math.hypot(x,y);
   const fade = 1-smoothUnit((progress-WOBBLE_FADE_START)/(WOBBLE_END-WOBBLE_FADE_START));
-  const strength = Math.min(WOBBLE_LIMIT,magnitude)*fade;
-  pose.wobbleAxisX = magnitude ? x/magnitude : 0;
-  pose.wobbleAxisY = magnitude ? y/magnitude : 0;
-  pose.wobbleX = pose.wobbleAxisX*strength;
-  pose.wobbleY = pose.wobbleAxisY*strength;
-  pose.wobbleBend = WOBBLE_BEND*strength/pose.extent;
+  const weight = fade*WOBBLE_LIMIT/Math.max(WOBBLE_LIMIT,wavePeak(pointer)+wavePeak(scroll));
+  writeWave(pointer,weight,pose.pointerWave);
+  writeWave(scroll,weight,pose.scrollWave);
 }
 
-export function wobbleProjected(x, y, pose, out) {
-  if (!pose.wobbleX && !pose.wobbleY) {
-    out.x = x;
-    out.y = y;
-    return;
-  }
-  const ux = pose.wobbleAxisX, uy = pose.wobbleAxisY;
-  const axial = x*ux+y*uy;
-  const along = Math.max(-1,Math.min(1,axial/pose.extent));
-  // The outer contour leads and the middle follows, bending the shape as it rebounds.
-  const travel = .38+.54*along*along+.14*along;
-  const bend = pose.wobbleBend*along;
-  out.x = x+pose.wobbleX*travel-(x-ux*axial)*bend;
-  out.y = y+pose.wobbleY*travel-(y-uy*axial)*bend;
+export function waveProjected(x, y, wave, extent, out) {
+  const axial = x*wave.axisX+y*wave.axisY;
+  const across = clampUnit(.5-.5*axial/extent);
+  const lead = (1-across)**2, middle = 2*across*(1-across), tail = across*across;
+  const dx = wave.x*lead+wave.middleX*middle+wave.tailX*tail;
+  const dy = wave.y*lead+wave.middleY*middle+wave.tailY*tail;
+  const bend = WOBBLE_BEND*(dx*wave.axisX+dy*wave.axisY)/extent;
+  out.x = x+dx-(x-wave.axisX*axial)*bend;
+  out.y = y+dy-(y-wave.axisY*axial)*bend;
 }
 
 // Round the dent across the facing surface, then steer displaced dots around the contact.
@@ -229,15 +259,16 @@ export function deformProjected(x, y, pose, out) {
 
 // Keep the shader and Canvas coefficients together with the numeric reference.
 export const DROPLET_GLSL = `
-vec2 wobbleProjected(vec2 point, vec2 wobble, float extent) {
-  float magnitude = length(wobble);
-  if (magnitude == 0.0) return point;
-  vec2 axis = wobble/magnitude;
+vec2 waveProjected(vec2 point, vec4 leadAndMiddle, vec4 tailAndAxis, float extent) {
+  vec2 axis = tailAndAxis.zw;
+  if (all(equal(axis,vec2(0.0)))) return point;
   float axial = dot(point,axis);
-  float along = clamp(axial/extent,-1.0,1.0);
-  float travel = .38+.54*along*along+.14*along;
-  float bend = ${WOBBLE_BEND}*magnitude*along/extent;
-  return point+wobble*travel-(point-axis*axial)*bend;
+  float across = clamp(.5-.5*axial/extent,0.0,1.0);
+  vec2 nearHalf = mix(leadAndMiddle.xy,leadAndMiddle.zw,across);
+  vec2 farHalf = mix(leadAndMiddle.zw,tailAndAxis.xy,across);
+  vec2 displacement = mix(nearHalf,farHalf,across);
+  float bend = ${WOBBLE_BEND}*dot(displacement,axis)/extent;
+  return point+displacement-(point-axis*axial)*bend;
 }
 
 vec2 deformProjected(vec2 point, vec2 direction, float strength, float extent, vec3 pressure, vec2 flow) {

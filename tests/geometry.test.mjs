@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createSurface, createNameSurface, projectSurface, INITIAL_YAW, INITIAL_PITCH,
   createDroplet, dropletTarget, stepDroplet, dropletPose, deformProjected, DROPLET_PRESSURE, DROPLET_HANDOFF,
-  createWobble, kickWobble, stepWobble, wobblePose, wobbleProjected, WOBBLE_END,
+  createWobble, kickWobble, stepWobble, createWavePose, wobblePose, waveProjected, WOBBLE_END,
 } from '../assets/js/geometry.mjs';
 
 test('original sphere and lettering use matching finite deterministic point clouds', () => {
@@ -115,9 +115,10 @@ test('pointer scale, sustained hold, delayed recovery, and lettering handoff are
   assert.deepEqual(state,createDroplet());
 });
 
-test('the wobble rebounds, damps, and fades before the lettering forms', () => {
+test('a rebound travels across the dots, damps, and fades before the lettering forms', () => {
   const up = createWobble(), down = createWobble(), idle = createWobble();
-  const pose = {extent:1.13}, center = {}, rim = {};
+  const pose = {extent:1.13,pointerWave:createWavePose(),scrollWave:createWavePose()};
+  const center = {}, near = {}, far = {};
   kickWobble(up,0,-.125);
   kickWobble(down,0,.125);
   stepWobble(up,55);
@@ -125,14 +126,16 @@ test('the wobble rebounds, damps, and fades before the lettering forms', () => {
   assert.ok(up.y < -.085);
   assert.equal(up.y,-down.y);
   wobblePose(idle,up,0,pose);
-  wobbleProjected(0,0,pose,center);
-  wobbleProjected(0,-1,pose,rim);
-  assert.ok(center.y < 0 && rim.y+1 < center.y,'the rim flexes ahead of the center');
+  waveProjected(0,0,pose.scrollWave,pose.extent,center);
+  waveProjected(0,-1,pose.scrollWave,pose.extent,near);
+  waveProjected(0,1,pose.scrollWave,pose.extent,far);
+  assert.ok(near.y+1 < center.y && center.y < far.y-1,'the crest travels from the near rim through the center');
   stepWobble(up,180);
   assert.ok(up.y > .02,'the initial kick overshoots in the other direction');
+  assert.ok(up.tailY < -.025,'the far edge still moves in the original direction as the near edge rebounds');
   wobblePose(idle,up,WOBBLE_END,pose);
-  wobbleProjected(0,-1,pose,rim);
-  assert.deepEqual(rim,{x:0,y:-1});
-  stepWobble(up,650);
+  waveProjected(0,-1,pose.scrollWave,pose.extent,near);
+  assert.deepEqual(near,{x:0,y:-1});
+  stepWobble(up,1050);
   assert.deepEqual(up,idle);
 });

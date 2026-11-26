@@ -348,7 +348,7 @@ test('fine-pointer squeeze dents the orb, spreads dots, and hands off to native 
   expect(center.nearAfter).toBeGreaterThan(0);
   expect(center.nearAfter).toBeLessThan(center.nearBefore*.45);
   await page.mouse.move(8,8);
-  await advance(620);
+  await advance(1300);
   await page.mouse.move(pointer.x,pointer.y);
   await advance(176);
   const approach = await compare();
@@ -376,7 +376,10 @@ test('fine-pointer squeeze dents the orb, spreads dots, and hands off to native 
   expect(releasing).toBeGreaterThan(1);
   expect(releasing).toBeLessThan(approach.peak);
   await advance(64);
-  expect((await compare()).peak).toBeLessThan(releasing);
+  const rebound = (await compare()).peak;
+  expect(rebound).toBeGreaterThan(2);
+  await advance(300);
+  expect((await compare()).peak).toBeLessThan(Math.max(releasing,rebound)*.55);
   await advance(850);
   expect((await compare()).peak).toBeLessThan(.001);
 
@@ -391,7 +394,7 @@ test('fine-pointer squeeze dents the orb, spreads dots, and hands off to native 
   const residual = (await compare()).peak;
   expect(residual).toBeGreaterThan(1);
   expect(residual).toBeLessThan(nearEdge);
-  await advance(930);
+  await advance(1230);
   expect((await compare()).peak).toBeLessThan(.001);
 
   await page.evaluate(({ x, y }) => window.dispatchEvent(new PointerEvent('pointermove',{
@@ -414,7 +417,7 @@ test('fine-pointer squeeze dents the orb, spreads dots, and hands off to native 
         window.dispatchEvent(new PointerEvent(event,{pointerId:1}));
       } else window.dispatchEvent(new Event(event));
     },event)));
-    await advance(1000);
+    await advance(1350);
     expect((await compare()).peak,event).toBeLessThan(.001);
   }
 
@@ -440,22 +443,22 @@ test('fine-pointer squeeze dents the orb, spreads dots, and hands off to native 
   await advance(16);
   expect((await compare()).peak).toBeGreaterThan(deformed*.65);
   await scroll(.003);
-  await advance(900);
+  await advance(1350);
   expect((await compare()).peak).toBeLessThan(.001);
   await expect(page.locator('.field-stage')).toHaveAttribute('data-field-settled','true');
   await scroll(.45);
-  await advance(900);
+  await advance(1350);
   expect((await compare()).peak).toBeLessThan(.001);
   const middle = await canvasDigest(page.locator('#field-canvas'));
   await scroll(1);
-  await advance(900);
+  await advance(1350);
   await expect(page.locator('#field-canvas')).toBeHidden();
   expect(await canvasDigest(page.locator('#brand-canvas'))).toBe(await canvasDigest(idle.locator('#brand-canvas')));
   await scroll(.45);
-  await advance(900);
+  await advance(1350);
   expect(await canvasDigest(page.locator('#field-canvas'))).toBe(middle);
   await scroll(0);
-  await advance(900);
+  await advance(1350);
   expect((await compare()).peak).toBeLessThan(.001);
 });
 
@@ -547,7 +550,7 @@ test('idle motion pauses outside the visible sphere and preserves its pose throu
     // Native scroll events use the browser's real frame queue; explicitly
     // deliver one before advancing the paused test clock's animation frames.
     await page.evaluate(()=>window.dispatchEvent(new Event('scroll')));
-    await page.clock.runFor(1200);
+    await page.clock.runFor(1450);
     await expect(stage).toHaveAttribute('data-field-settled','true');
     const expected = Math.max(0,Math.min(1,(target-metrics.start)/(metrics.end-metrics.start)));
     expect(Math.abs(await progress(page)-expected)).toBeLessThan(.002);
@@ -859,7 +862,7 @@ for (const software of [false,true]) {
 async function inspectGPU(page) {
   await page.addInitScript(() => {
     window.__qaGPU = { draws:0, uploads:0, dots:0, canvasPaints:0, samples:[], capture:false, strength:0, peakFlow:0,
-      wobbleX:0, wobbleY:0, wobbleHistory:[], captureWobble:false };
+      wobbleX:0, wobbleY:0, tailX:0, tailY:0, wobbleHistory:[], captureWobble:false };
     const stats = window.__qaGPU;
     const getContext = HTMLCanvasElement.prototype.getContext;
     const clear = CanvasRenderingContext2D.prototype.clearRect;
@@ -881,25 +884,23 @@ async function inspectGPU(page) {
       const bufferData = gl.bufferData.bind(gl), drawArrays = gl.drawArrays.bind(gl);
       gl.bufferData = (...args) => { stats.uploads++; return bufferData(...args); };
       const location = gl.getUniformLocation.bind(gl), uniform4f = gl.uniform4f.bind(gl);
-      const uniform2f = gl.uniform2f.bind(gl), positions = new WeakSet(), flow = new WeakSet(), wobble = new WeakSet();
+      const uniform2f = gl.uniform2f.bind(gl), positions = new WeakSet(), flow = new WeakSet();
+      const waves = new WeakMap(), taps = {pointerWave:[0,0],pointerWaveTail:[0,0],scrollWave:[0,0],scrollWaveTail:[0,0]};
       gl.getUniformLocation = (program,name) => {
         const result = location(program,name);
         if (result && name === 'droplet') positions.add(result);
         if (result && name === 'flow') flow.add(result);
-        if (result && name === 'wobble') wobble.add(result);
+        if (result && Object.hasOwn(taps,name)) waves.set(result,name);
         return result;
       };
       gl.uniform4f = (location,x,y,strength,extent) => {
         if (positions.has(location)) stats.strength = strength;
+        const wave = waves.get(location);
+        if (wave) taps[wave] = [x,y];
         return uniform4f(location,x,y,strength,extent);
       };
       gl.uniform2f = (location,x,y) => {
         if (flow.has(location)) stats.peakFlow = Math.max(stats.peakFlow,Math.hypot(x,y));
-        if (wobble.has(location)) {
-          stats.wobbleX = x;
-          stats.wobbleY = y;
-          if (stats.captureWobble) stats.wobbleHistory.push({x,y});
-        }
         return uniform2f(location,x,y);
       };
       gl.drawArrays = (mode,first,count) => {
@@ -907,6 +908,11 @@ async function inspectGPU(page) {
         if (mode !== gl.POINTS) return;
         stats.draws++;
         stats.dots = count;
+        stats.wobbleX = taps.pointerWave[0]+taps.scrollWave[0];
+        stats.wobbleY = taps.pointerWave[1]+taps.scrollWave[1];
+        stats.tailX = taps.pointerWaveTail[0]+taps.scrollWaveTail[0];
+        stats.tailY = taps.pointerWaveTail[1]+taps.scrollWaveTail[1];
+        if (stats.captureWobble) stats.wobbleHistory.push({x:stats.wobbleX,y:stats.wobbleY,tailX:stats.tailX,tailY:stats.tailY});
         const stage = document.querySelector('.field-stage');
         if (stats.capture) {
           const { strength,wobbleY } = stats;
@@ -946,8 +952,11 @@ test('WebGL2 draws the droplet with static buffers and hands off through native 
   await page.evaluate(() => { window.__qaGPU.captureWobble = true; });
   await page.mouse.move(8,8);
   await expect.poll(() => page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.x > .055))).toBe(true);
-  await expect.poll(() => page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.x < -.025))).toBe(true);
-  await expect.poll(() => page.evaluate(() => Math.abs(window.__qaGPU.wobbleX)+Math.abs(window.__qaGPU.wobbleY))).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.x < -.025 && sample.tailX > .012))).toBe(true);
+  await expect.poll(() => page.evaluate(() => {
+    const {wobbleX,wobbleY,tailX,tailY} = window.__qaGPU;
+    return Math.abs(wobbleX)+Math.abs(wobbleY)+Math.abs(tailX)+Math.abs(tailY);
+  })).toBe(0);
   await page.evaluate(() => { window.__qaGPU.wobbleHistory.length = 0; });
   await nativeScroll(page,120);
   expect(await page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.y < -.06))).toBe(true);
@@ -973,6 +982,7 @@ test('WebGL2 draws the droplet with static buffers and hands off through native 
   await page.evaluate(() => { window.__qaGPU.wobbleHistory.length = 0; window.__qaGPU.captureWobble = true; });
   await nativeScroll(page,0);
   expect(await page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.y > .08))).toBe(true);
+  expect(await page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.y < -.025 && sample.tailY > .012))).toBe(true);
   await page.evaluate(() => { window.__qaGPU.captureWobble = false; });
   const { start,end } = await fieldMetrics(page);
   await nativeScroll(page,start+(end-start)*.45);
