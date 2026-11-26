@@ -177,7 +177,16 @@ const opacity = element => element.evaluate(node => {
   for (let current = node; current; current = current.parentElement) result *= Number(getComputedStyle(current).opacity);
   return result;
 });
-async function readyField(page) {
+async function forceCanvas(page) {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(kind,...options) {
+      return kind === 'webgl2' ? null : getContext.apply(this,[kind,...options]);
+    };
+  });
+}
+async function readyField(page, { canvas = true } = {}) {
+  if (canvas) await forceCanvas(page);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/');
   await page.evaluate(() => document.fonts.ready);
@@ -258,26 +267,27 @@ test('visible sphere rotates gently with a capped paint cadence and native scrol
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
 });
 
-test('fine-pointer pocket stays local, releases, and hands off to native scroll', async ({ page, isMobile }) => {
+test('fine-pointer squeeze dents the orb, spreads dots, and hands off to native scroll', async ({ page, isMobile }) => {
   test.skip(isMobile, 'The fine-pointer comparison uses the desktop mouse');
   await page.clock.install();
   await page.clock.pauseAt(await page.evaluate(() => Date.now()+1000));
   const idle = await page.context().newPage();
   const runs = [page, idle];
   await Promise.all(runs.map(async run => {
+    await forceCanvas(run);
     await run.addInitScript(() => {
       // Compare the coordinates sent to the real canvas in stable depth-band order.
       const { clearRect, arc } = CanvasRenderingContext2D.prototype;
-      window.__qaPocket = { dots: [], paints: 0 };
+      window.__qaDroplet = { dots: [], paints: 0 };
       CanvasRenderingContext2D.prototype.clearRect = function(...args) {
         if (this.canvas.id === 'field-canvas') {
-          window.__qaPocket.dots.length = 0;
-          window.__qaPocket.paints++;
+          window.__qaDroplet.dots.length = 0;
+          window.__qaDroplet.paints++;
         }
         return clearRect.apply(this,args);
       };
       CanvasRenderingContext2D.prototype.arc = function(x,y,...args) {
-        if (this.canvas.id === 'field-canvas') window.__qaPocket.dots.push(x,y);
+        if (this.canvas.id === 'field-canvas') window.__qaDroplet.dots.push(x,y);
         return arc.call(this,x,y,...args);
       };
     });
@@ -297,49 +307,55 @@ test('fine-pointer pocket stays local, releases, and hands off to native scroll'
   expect(await page.evaluate(() => matchMedia('(any-pointer: fine)').matches)).toBe(true);
   const pointer = await page.locator('.field-art').evaluate(art => {
     const { left, top, width, height } = art.getBoundingClientRect();
-    return { x: Math.round(left+width/2), y: Math.round(top+height/2) };
+    return { x: Math.round(left+width*.75), y: Math.round(top+height/2), centerX:Math.round(left+width/2) };
   });
   const readPaint = run => run.evaluate(() => {
     const { left, top } = document.querySelector('#field-canvas').getBoundingClientRect();
-    return { ...window.__qaPocket, left, top };
+    return { ...window.__qaDroplet, left, top };
   });
-  async function compare() {
+  async function compare(contactX = pointer.x) {
     const [active, baseline] = await Promise.all(runs.map(readPaint));
     expect(active.dots.length).toBe(baseline.dots.length);
     expect(active.dots.length).toBeGreaterThan(0);
-    let peak = 0, outward = 0, inward = 0, distant = 0;
+    let peak = 0, wide = 0, right = -Infinity, originalRight = -Infinity;
+    let nearBefore = 0, nearAfter = 0;
     for (let i=0; i<active.dots.length; i+=2) {
-      const x = baseline.dots[i]+baseline.left-pointer.x;
-      const y = baseline.dots[i+1]+baseline.top-pointer.y;
-      const dx = active.dots[i]+active.left-baseline.left-baseline.dots[i];
-      const dy = active.dots[i+1]+active.top-baseline.top-baseline.dots[i+1];
-      const change = Math.hypot(dx,dy);
-      const distance = Math.hypot(x,y);
+      const x = baseline.dots[i]+baseline.left, pressedX = active.dots[i]+active.left;
+      const y = baseline.dots[i+1]+baseline.top, pressedY = active.dots[i+1]+active.top;
+      const change = Math.hypot(pressedX-x,pressedY-y);
       peak = Math.max(peak,change);
-      if (distance > 72) distant = Math.max(distant,change);
-      if (change > 1 && distance < 40) {
-        if (x*dx+y*dy > 0) outward++;
-        else inward++;
-      }
+      if (change > 6) wide++;
+      right = Math.max(right,pressedX);
+      originalRight = Math.max(originalRight,x);
+      if (Math.hypot(x-contactX,y-pointer.y) < 24) nearBefore++;
+      if (Math.hypot(pressedX-contactX,pressedY-pointer.y) < 24) nearAfter++;
     }
-    return { peak, outward, inward, distant, paints: active.paints };
+    return { peak,wide,dent:originalRight-right,nearBefore,nearAfter,paints:active.paints };
   }
-  const assertPocket = sample => {
-    expect(sample.peak).toBeGreaterThan(16);
-    expect(sample.outward).toBeGreaterThan(20);
-    expect(sample.inward).toBe(0);
-    expect(sample.distant).toBeLessThan(.001);
+  const assertSqueeze = sample => {
+    expect(sample.wide).toBeGreaterThan(1400);
+    expect(sample.dent).toBeGreaterThan(20);
+    expect(sample.nearBefore).toBeGreaterThan(10);
+    expect(sample.nearAfter).toBeLessThan(sample.nearBefore*.66);
   };
   await page.mouse.move(8,8);
   await advance(100);
   expect((await compare()).peak).toBeLessThan(.001);
+  await page.mouse.move(pointer.centerX,pointer.y);
+  await advance(380);
+  const center = await compare(pointer.centerX);
+  expect(center.dent).toBeGreaterThan(8);
+  expect(center.nearAfter).toBeGreaterThan(0);
+  expect(center.nearAfter).toBeLessThan(center.nearBefore*.45);
+  await page.mouse.move(8,8);
+  await advance(620);
   await page.mouse.move(pointer.x,pointer.y);
-  await advance(100);
+  await advance(176);
   const approach = await compare();
-  assertPocket(approach);
+  assertSqueeze(approach);
   const firstPose = await readPaint(page);
   await advance(250);
-  assertPocket(await compare());
+  assertSqueeze(await compare());
   expect((await readPaint(page)).dots).not.toEqual(firstPose.dots);
 
   const beforeBurst = (await compare()).paints;
@@ -353,7 +369,7 @@ test('fine-pointer pocket stays local, releases, and hands off to native scroll'
   expect((await compare()).paints).toBe(beforeBurst);
   await advance(180);
   expect((await compare()).paints-beforeBurst).toBeLessThanOrEqual(5);
-  assertPocket(await compare());
+  assertSqueeze(await compare());
   await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerout',{pointerId:1})));
   await advance(90);
   const releasing = (await compare()).peak;
@@ -361,23 +377,21 @@ test('fine-pointer pocket stays local, releases, and hands off to native scroll'
   expect(releasing).toBeLessThan(approach.peak);
   await advance(64);
   expect((await compare()).peak).toBeLessThan(releasing);
-  await advance(160);
+  await advance(850);
   expect((await compare()).peak).toBeLessThan(.001);
 
   // A fast in-page move to an empty corner should also leave a brief recovery.
   const artWidth = await page.locator('.field-art').evaluate(art => art.getBoundingClientRect().width);
-  const diagonal = Math.round(artWidth*.265);
-  const corner = Math.round(artWidth*.356);
-  await page.mouse.move(pointer.x+diagonal,pointer.y+diagonal);
-  await advance(200);
+  await page.mouse.move(pointer.x+Math.round(artWidth*.055),pointer.y);
+  await advance(220);
   const nearEdge = (await compare()).peak;
   expect(nearEdge).toBeGreaterThan(16);
-  await page.mouse.move(pointer.x+corner,pointer.y+corner);
-  await advance(48);
+  await page.mouse.move(8,8);
+  await advance(64);
   const residual = (await compare()).peak;
   expect(residual).toBeGreaterThan(1);
   expect(residual).toBeLessThan(nearEdge);
-  await advance(400);
+  await advance(930);
   expect((await compare()).peak).toBeLessThan(.001);
 
   await page.evaluate(({ x, y }) => window.dispatchEvent(new PointerEvent('pointermove',{
@@ -388,8 +402,8 @@ test('fine-pointer pocket stays local, releases, and hands off to native scroll'
   for (const event of ['pointercancel','blur','resize','pageshow','visibilitychange']) {
     await page.mouse.move(pointer.x+2,pointer.y);
     await page.mouse.move(pointer.x,pointer.y);
-    await advance(100);
-    assertPocket(await compare());
+    await advance(176);
+    assertSqueeze(await compare());
     await Promise.all(runs.map(run => run.evaluate(event => {
       if (event === 'visibilitychange') {
         Object.defineProperty(document,'hidden',{configurable:true,value:true});
@@ -400,7 +414,7 @@ test('fine-pointer pocket stays local, releases, and hands off to native scroll'
         window.dispatchEvent(new PointerEvent(event,{pointerId:1}));
       } else window.dispatchEvent(new Event(event));
     },event)));
-    await advance(300);
+    await advance(1000);
     expect((await compare()).peak,event).toBeLessThan(.001);
   }
 
@@ -408,13 +422,14 @@ test('fine-pointer pocket stays local, releases, and hands off to native scroll'
     const { fieldStart, fieldEnd } = document.querySelector('.field-stage').dataset;
     const start = Number(fieldStart), end = Number(fieldEnd);
     const target = fraction === 1 ? Math.ceil(end) : Math.round(start+(end-start)*fraction);
+    if (scrollY === target) { resolve(); return; }
     // The browser delivers scroll events while the test clock is paused.
     window.addEventListener('scroll',() => resolve(),{once:true});
     scrollTo({top:target,behavior:'instant'});
   }),fraction)));
   await page.mouse.move(pointer.x+2,pointer.y);
   await page.mouse.move(pointer.x,pointer.y);
-  await advance(100);
+  await advance(176);
   const deformed = (await compare()).peak;
   expect(deformed).toBeGreaterThan(16);
   await scroll(.004);
@@ -593,19 +608,26 @@ test('fast scroll jumps animate through intermediate shapes and dock on tall scr
     expect(limit).toBeGreaterThan(0);
     const samples = await page.evaluate(() => new Promise((resolve, reject) => {
       const stage = document.querySelector('.field-stage');
+      const header = document.querySelector('.site-header');
+      const canvas = document.querySelector('#field-canvas');
       const samples = [];
       scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
       // Late font/element measurements must not turn a scroll into an instant snap.
       document.querySelector('.lab-hero').style.borderBottom = '1px solid transparent';
       function sample() {
-        samples.push(Number(stage.dataset.fieldProgress));
+        samples.push({ progress:Number(stage.dataset.fieldProgress), visible:!canvas.hidden,
+          transparent:getComputedStyle(header).backgroundColor === 'rgba(0, 0, 0, 0)' });
         if (stage.dataset.fieldState === 'docked' && stage.dataset.fieldSettled === 'true') return resolve(samples);
         if (samples.length > 180) return reject(new Error('The scroll morph did not finish docking'));
         requestAnimationFrame(sample);
       }
       requestAnimationFrame(sample);
     }));
-    expect(samples.filter(value => value > 0 && value < 1).length).toBeGreaterThan(3);
+    const moving = samples.filter(sample => sample.progress > 0 && sample.progress < 1);
+    expect(moving.length).toBeGreaterThan(3);
+    expect(moving.some(sample => sample.visible)).toBe(true);
+    expect(moving.every(sample => !sample.visible || sample.transparent)).toBe(true);
+    expect(samples.at(-1).transparent).toBe(false);
     await expect(page.locator('.field-stage')).toHaveAttribute('data-field-progress', '1.00000');
     await assertDockBounds(page);
     await nativeScroll(page, 0);
@@ -770,7 +792,7 @@ test('reduced motion keeps the static sphere and ordinary native brand', async (
 });
 
 test('keyboard and touch scrolling over the decorative canvas retain native behavior', async ({ page }) => {
-  await readyField(page);
+  await readyField(page,{canvas:false});
   await page.keyboard.press('PageDown');
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
   // Native keyboard scrolling may still be easing after it first crosses 100px.
@@ -804,4 +826,196 @@ test('keyboard and touch scrolling over the decorative canvas retain native beha
   await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(initial + 30);
   await expect(page.locator('#field-canvas')).toHaveAttribute('aria-hidden', 'true');
+});
+
+for (const software of [false,true]) {
+  test(`${software ? 'Software' : 'Unavailable'} WebGL2 keeps the usable Canvas frame`, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'The renderer probe is covered on desktop');
+    await page.addInitScript(software => {
+      const getContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function(kind,...options) {
+        if (this.id === 'field-gl' && kind === 'webgl2') {
+          return software ? {
+            RENDERER:0x1f01,
+            getExtension:() => null,
+            getParameter:() => 'ANGLE (Google, Vulkan SwiftShader Device)',
+          } : null;
+        }
+        return getContext.apply(this,[kind,...options]);
+      };
+    },software);
+    const requested = [];
+    const observe = request => requested.push(request.url());
+    page.on('request',observe);
+    await readyField(page,{canvas:false});
+    await expect(page.locator('.field-stage')).toHaveAttribute('data-field-gpu','unavailable');
+    await expect(page.locator('.field-stage')).toHaveAttribute('data-field-renderer','canvas');
+    await expect(page.locator('#field-canvas')).toBeVisible();
+    expect(requested.some(url => url.includes('field-webgl.mjs'))).toBe(false);
+    page.off('request',observe);
+  });
+}
+
+async function inspectGPU(page) {
+  await page.addInitScript(() => {
+    window.__qaGPU = { draws:0, uploads:0, dots:0, canvasPaints:0, samples:[], capture:false, strength:0, peakFlow:0,
+      wobbleX:0, wobbleY:0, wobbleHistory:[], captureWobble:false };
+    const stats = window.__qaGPU;
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    const clear = CanvasRenderingContext2D.prototype.clearRect;
+    CanvasRenderingContext2D.prototype.clearRect = function(...args) {
+      if (this.canvas.id === 'field-canvas') stats.canvasPaints++;
+      return clear.apply(this,args);
+    };
+    HTMLCanvasElement.prototype.getContext = function(kind,...options) {
+      if (this.id !== 'field-gl' || kind !== 'webgl2') return getContext.apply(this,[kind,...options]);
+      stats.probedAfterCanvas = stats.canvasPaints > 0 && document.querySelector('#field-canvas').hidden === false;
+      // The production gate is tested separately. Exercise genuine WebGL2 calls
+      // even where headless Chromium only has its software rasterizer.
+      const gl = getContext.call(this,kind,{...options[0],failIfMajorPerformanceCaveat:false});
+      if (!gl) return null;
+      stats.lose = () => gl.getExtension('WEBGL_lose_context').loseContext();
+      const getParameter = gl.getParameter.bind(gl);
+      const debug = gl.getExtension('WEBGL_debug_renderer_info');
+      gl.getParameter = key => key === gl.RENDERER || key === debug?.UNMASKED_RENDERER_WEBGL ? 'QA WebGL2' : getParameter(key);
+      const bufferData = gl.bufferData.bind(gl), drawArrays = gl.drawArrays.bind(gl);
+      gl.bufferData = (...args) => { stats.uploads++; return bufferData(...args); };
+      const location = gl.getUniformLocation.bind(gl), uniform4f = gl.uniform4f.bind(gl);
+      const uniform2f = gl.uniform2f.bind(gl), positions = new WeakSet(), flow = new WeakSet(), wobble = new WeakSet();
+      gl.getUniformLocation = (program,name) => {
+        const result = location(program,name);
+        if (result && name === 'droplet') positions.add(result);
+        if (result && name === 'flow') flow.add(result);
+        if (result && name === 'wobble') wobble.add(result);
+        return result;
+      };
+      gl.uniform4f = (location,x,y,strength,extent) => {
+        if (positions.has(location)) stats.strength = strength;
+        return uniform4f(location,x,y,strength,extent);
+      };
+      gl.uniform2f = (location,x,y) => {
+        if (flow.has(location)) stats.peakFlow = Math.max(stats.peakFlow,Math.hypot(x,y));
+        if (wobble.has(location)) {
+          stats.wobbleX = x;
+          stats.wobbleY = y;
+          if (stats.captureWobble) stats.wobbleHistory.push({x,y});
+        }
+        return uniform2f(location,x,y);
+      };
+      gl.drawArrays = (mode,first,count) => {
+        drawArrays(mode,first,count);
+        if (mode !== gl.POINTS) return;
+        stats.draws++;
+        stats.dots = count;
+        const stage = document.querySelector('.field-stage');
+        if (stats.capture) {
+          const { strength,wobbleY } = stats;
+          queueMicrotask(() => stats.samples.push({ strength,wobbleY,progress:Number(stage.dataset.fieldProgress) }));
+        }
+        if (!stats.nonzero) {
+          const pixels = new Uint8Array(gl.drawingBufferWidth*gl.drawingBufferHeight*4);
+          gl.readPixels(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+          stats.nonzero = pixels.filter((value,index) => index%4 === 3 && value > 0).length;
+        }
+      };
+      return gl;
+    };
+  });
+}
+
+test('WebGL2 draws the droplet with static buffers and hands off through native scroll', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'The shader input and native wheel comparison use desktop');
+  await inspectGPU(page);
+  await readyField(page,{canvas:false});
+  const stage = page.locator('.field-stage'), gl = page.locator('#field-gl');
+  await expect(stage).toHaveAttribute('data-field-renderer','webgl2');
+  await expect(gl).toBeVisible();
+  await expect(page.locator('#field-canvas')).toBeHidden();
+  const initial = await page.evaluate(() => { const { lose, ...stats } = window.__qaGPU; return stats; });
+  expect(initial.probedAfterCanvas).toBe(true);
+  expect(initial.dots).toBe(8910);
+  expect(initial.nonzero).toBeGreaterThan(500);
+  expect(initial.uploads).toBe(2);
+  const bounds = await page.locator('.field-art').boundingBox();
+  await page.mouse.move(bounds.x+bounds.width*.79,bounds.y+bounds.height*.5);
+  await expect.poll(() => page.evaluate(() => window.__qaGPU.strength)).toBeGreaterThan(.12);
+  await page.mouse.move(bounds.x+bounds.width*.59,bounds.y+bounds.height*.63);
+  await expect.poll(() => page.evaluate(() => window.__qaGPU.peakFlow)).toBeGreaterThan(.25);
+  await page.mouse.move(bounds.x+bounds.width*.79,bounds.y+bounds.height*.5);
+  await page.waitForTimeout(320);
+  await page.evaluate(() => { window.__qaGPU.captureWobble = true; });
+  await page.mouse.move(8,8);
+  await expect.poll(() => page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.x > .055))).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.x < -.025))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Math.abs(window.__qaGPU.wobbleX)+Math.abs(window.__qaGPU.wobbleY))).toBe(0);
+  await page.evaluate(() => { window.__qaGPU.wobbleHistory.length = 0; });
+  await nativeScroll(page,120);
+  expect(await page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.y < -.06))).toBe(true);
+  await page.evaluate(() => { window.__qaGPU.wobbleHistory.length = 0; });
+  await nativeScroll(page,0);
+  expect(await page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.y > .06))).toBe(true);
+  await page.evaluate(() => { window.__qaGPU.captureWobble = false; });
+  await page.mouse.move(bounds.x+bounds.width*.79,bounds.y+bounds.height*.5);
+  await expect.poll(() => page.evaluate(() => window.__qaGPU.strength)).toBeGreaterThan(.12);
+  await page.evaluate(() => { window.__qaGPU.capture = true; });
+  await page.mouse.wheel(0,1000);
+  await expect(stage).toHaveAttribute('data-field-state','docked');
+  await expect(gl).toBeHidden();
+  const dockedDraws = await page.evaluate(() => window.__qaGPU.draws);
+  await page.waitForTimeout(140);
+  expect(await page.evaluate(() => window.__qaGPU.draws)).toBe(dockedDraws);
+  const after = await page.evaluate(() => { const { lose, ...stats } = window.__qaGPU; return stats; });
+  expect(after.uploads).toBe(initial.uploads);
+  expect(after.canvasPaints).toBe(initial.canvasPaints);
+  expect(after.samples.some(sample => sample.progress > 0 && sample.progress < .12 && sample.strength > 0)).toBe(true);
+  expect(after.samples.some(sample => sample.progress >= .18 && sample.strength === 0)).toBe(true);
+  expect(after.samples.some(sample => sample.progress >= .58 && sample.wobbleY === 0)).toBe(true);
+  await page.evaluate(() => { window.__qaGPU.wobbleHistory.length = 0; window.__qaGPU.captureWobble = true; });
+  await nativeScroll(page,0);
+  expect(await page.evaluate(() => window.__qaGPU.wobbleHistory.some(sample => sample.y > .08))).toBe(true);
+  await page.evaluate(() => { window.__qaGPU.captureWobble = false; });
+  const { start,end } = await fieldMetrics(page);
+  await nativeScroll(page,start+(end-start)*.45);
+  await expect(gl).toBeVisible();
+  expect(await page.evaluate(() => window.__qaGPU.strength)).toBe(0);
+  await nativeScroll(page,0);
+  await expect(stage).toHaveAttribute('data-field-state','sphere');
+  const hiddenDraws = await page.evaluate(() => {
+    Object.defineProperty(document,'hidden',{configurable:true,value:true});
+    document.dispatchEvent(new Event('visibilitychange'));
+    return window.__qaGPU.draws;
+  });
+  await page.waitForTimeout(140);
+  expect(await page.evaluate(() => window.__qaGPU.draws)).toBe(hiddenDraws);
+  await page.evaluate(() => {
+    delete document.hidden;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => page.evaluate(() => window.__qaGPU.draws)).toBeGreaterThan(hiddenDraws);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await expect(stage).toHaveAttribute('data-field-state','static');
+  await expect(gl).toBeHidden();
+  await expect(page.locator('.field-fallback')).toBeVisible();
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await expect(gl).toBeVisible();
+  await page.evaluate(() => window.__qaGPU.lose());
+  await expect(stage).toHaveAttribute('data-field-renderer','canvas');
+  await expect(page.locator('#field-canvas')).toBeVisible();
+  await expect(gl).toBeHidden();
+});
+
+test('deferred renderer initialization failure leaves Canvas animation usable', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'The deferred failure path is covered on desktop');
+  await inspectGPU(page);
+  await page.route(/\/field-webgl\.mjs\?v=/,route => route.fulfill({
+    contentType:'text/javascript',
+    body:'export function createWebGLField() { throw new Error("QA initialization failure"); }',
+  }));
+  await readyField(page,{canvas:false});
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-gpu','unavailable');
+  expect(await page.evaluate(() => window.__qaGPU.probedAfterCanvas)).toBe(true);
+  await expect(page.locator('#field-canvas')).toBeVisible();
+  const { start,end } = await fieldMetrics(page);
+  await nativeScroll(page,start+(end-start)*.4);
+  await expect(page.locator('.field-stage')).toHaveAttribute('data-field-state','morph');
 });

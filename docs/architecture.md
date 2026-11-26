@@ -1,5 +1,13 @@
 # Architecture and review decisions
 
+## Liquid orb and renderer selection
+
+A fine pointer presses a rounded dent into the near contour. A press near the center compresses the visible outline evenly, and nearby dots slide around the contact. As the cursor moves, the delay between the two damped position stages curves that flow in the direction of travel. The curve subsides as the dots flow back together at the last contact, and the deformation fades out early in the native scroll morph. Both renderers use the same pose, projection bounds, and scroll controller.
+
+The released surface rebounds through a damped spring. Changes in native scroll position drive a separate spring in the opposite direction. A fast return from the dock carries its momentum into the reappearing sphere. The rim flexes ahead of the center, and the wobble fades out before KAWER forms. The sticky header is transparent while the moving field is visible. Its backing returns after the handoff so the navigation is readable over the work list.
+
+The homepage first paints with Canvas 2D, then loads a content-versioned Three.js bundle when hardware WebGL2 is available. One point draw reuses the 8,910 sphere and lettering coordinates. A vertex shader projects and deforms them from shared uniforms. While the shape changes, the GPU path can follow the display cadence when measured rendering cost is low. Settled idle motion uses the existing adaptive cap. Software rendering, unavailable WebGL2, or a lost context uses Canvas 2D. Reduced motion keeps the static SVG.
+
 ## Visible idle rotation
 
 Restore the original slow 3D turn at 0.065 radians/second, with a small pitch change and at most 2.5px vertical drift. The sphere still uses all 8,910 original particles and the packed projection/depth-band buffers. Projection caching now includes yaw and pitch as well as morph progress. Initial fit calculations use a conservative perspective envelope for every rotation plus drift padding.
@@ -8,7 +16,7 @@ Only the visible, unmorphed, stationary sphere schedules idle work. One timeout 
 
 The active-time clock freezes rather than catching up after suspension. Scroll/morph frames use the last displayed pose, smoothly bringing its wrapped yaw and pitch to the front-facing lettering and fading the small drift. Reversing to the sphere resumes that same pose before rotation continues. The miniature wordmark remains still. The static SVG and native links remain the fallback. Earlier sections describe the previous releases, including the superseded no-idle-loop behavior.
 
-Passive viewport listeners retain the latest fine-pointer position for the visible sphere. Each idle paint pushes nearby projected dots outward with a smooth falloff in CSS pixels, keeping the pocket responsive while the sphere rotates under a stationary pointer. Reusable offsets stay within the existing canvas and ease away on exit or early in the scroll morph. A shallow scroll can finish moving before the pocket closes. The renderer completes that brief fade before it settles. The lettering and dock use the original projection. Touch gestures follow native scrolling, and viewport, visibility, page restoration, and motion-preference changes clear the interaction.
+The earlier pointer response pushed nearby dots outward to form a small pocket. The liquid deformation now uses the same passive input and follows the same native scrolling and lifecycle behavior.
 
 ## Work enters during the orb transition
 

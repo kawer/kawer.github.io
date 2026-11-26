@@ -1,6 +1,12 @@
-import { createSurface, createNameSurface, projectSurface, INITIAL_YAW, INITIAL_PITCH } from './geometry.mjs';
+import {
+  createSurface, createNameSurface, projectSurface, INITIAL_YAW, INITIAL_PITCH,
+  DROPLET_HANDOFF, WOBBLE_END, clampUnit as clamp, smoothUnit as ease,
+  createDroplet, dropletTarget, stepDroplet, dropletPose, deformProjected,
+  createWobble, resetWobble, kickWobble, stepWobble, wobblePose, wobbleProjected,
+} from './geometry.mjs';
 
 const canvas = /** @type {HTMLCanvasElement | null} */ (document.querySelector('#field-canvas'));
+const gpuCanvas = /** @type {HTMLCanvasElement | null} */ (document.querySelector('#field-gl'));
 const mini = /** @type {HTMLCanvasElement | null} */ (document.querySelector('#brand-canvas'));
 const stage = /** @type {HTMLElement | null} */ (document.querySelector('.field-stage'));
 const art = /** @type {HTMLElement | null} */ (document.querySelector('.field-art'));
@@ -10,7 +16,7 @@ const workHeading = /** @type {HTMLElement | null} */ (document.querySelector('#
 const header = /** @type {HTMLElement | null} */ (document.querySelector('.site-header'));
 const dock = /** @type {HTMLElement | null} */ (document.querySelector('.brand-dock'));
 const context = canvas?.getContext('2d'), miniContext = mini?.getContext('2d');
-if (canvas && mini && stage && art && hero && foot && workHeading && header && dock && context && miniContext) {
+if (canvas && gpuCanvas && mini && stage && art && hero && foot && workHeading && header && dock && context && miniContext) {
   const sphere = createSurface(), name = createNameSurface(sphere.length);
   let sphereRadius = 0;
   for (const point of sphere) sphereRadius = Math.max(sphereRadius,Math.hypot(point.x,point.y,point.z));
@@ -18,7 +24,6 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   const sphereExtent = sphereRadius / Math.sqrt(1-(sphereRadius/3.8)**2);
   // Stable buffers keep the scroll path free of per-particle object allocation.
   const projectedX = new Float64Array(sphere.length), projectedY = new Float64Array(sphere.length);
-  const offsetX = new Float32Array(sphere.length), offsetY = new Float32Array(sphere.length);
   const next = new Int32Array(sphere.length), first = new Int32Array(8), last = new Int32Array(8);
   // A convex morph and rotation cannot exceed either endpoint's radius. This
   // perspective bound contains every intermediate shape, including its dots.
@@ -26,18 +31,22 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   const projectedRadius = radius / Math.sqrt(1-(radius/3.8)**2);
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const finePointer = matchMedia('(any-pointer: fine)');
-  const pocketRadius = 68, pocketPush = 24, releaseDuration = 180;
-  let pointerId = null, pointerX = 0, pointerY = 0, pointerReady = false;
-  let offsetWeight = 0, releaseAt = null;
+  const droplet = createDroplet(), pressure = {x:0,y:0,strength:0};
+  const pointerWobble = createWobble(), scrollWobble = createWobble();
+  const pose = {x:0,y:0,contactX:0,contactY:0,flowX:0,flowY:0,side:0,strength:0,extent:sphereExtent,
+    wobbleX:0,wobbleY:0,wobbleAxisX:0,wobbleAxisY:0,wobbleBend:0};
+  const displaced = {x:0,y:0};
+  const view = {x:0,y:0,size:1,pixelRatio:1,yaw:0,pitch:0,morph:0,scale:1,radiusScale:1,opacity:1};
+  let gpu, gpuActive = false, gpuAttempted = false;
+  let pointerId = null, pointerX = 0, pointerY = 0, pointerReady = false, releaseProgress = 0;
   let frame = 0, measureNeeded = true, docked = false;
   let visualProgress = 0, initialized = false, lastFrameTime = 0;
   let idleTimer = 0, idleTime = 0, idleLastTime = 0, lastScrollAt = -Infinity, idleCost = 3;
+  let lastScrollY = window.scrollY, returnKick = 0;
   let snapScrollY = null;
   let artX = 0, artY = 0, artSize = 0, start = 0, end = 1;
   let targetX = 0, targetY = 0, targetScale = 1, canvasSize = 1, pixelRatio = 1, headerEdge = 0;
   let projectedMorph = -1, projectedYaw = NaN, projectedPitch = NaN;
-  const clamp = value => Math.max(0,Math.min(1,value));
-  const ease = value => { const t = clamp(value); return t*t*(3-2*t); };
 
   function fit(target, ctx, width, height) {
     const ratio = pixelRatio;
@@ -80,70 +89,110 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
     }
     projectedMorph = morph; projectedYaw = yaw; projectedPitch = pitch;
   }
-  function paintField(x, y, scale, radiusScale, opacity, livePointer, localPointerX, localPointerY, pointerBlend) {
-    const retainedWeight = offsetWeight*(1-pointerBlend);
-    const displayWeight = livePointer ? 1 : offsetWeight;
-    let hasOffsets = false;
+  function paintField() {
+    project(view.morph,view.yaw,view.pitch);
+    const wobbling = pose.wobbleX || pose.wobbleY;
     for (let band=0;band<8;band++) {
-      context.fillStyle = `rgba(35,92,219,${(0.14+band*0.115)*opacity})`;
+      context.fillStyle = `rgba(35,92,219,${(0.14+band*0.115)*view.opacity})`;
       context.beginPath();
-      const radius = (0.6+band*0.13)*radiusScale;
+      const radius = (0.6+band*0.13)*view.radiusScale;
       for (let index=first[band];index!==-1;index=next[index]) {
-        let px = x+projectedX[index]*scale, py = y+projectedY[index]*scale;
-        if (livePointer) {
-          const dx = px-localPointerX, dy = py-localPointerY;
-          const distanceSquared = dx*dx+dy*dy;
-          let push = 0;
-          if (distanceSquared < pocketRadius*pocketRadius) {
-            const distance = Math.sqrt(distanceSquared);
-            push = pocketPush*(1-ease(distance/pocketRadius))/Math.max(8,distance);
-            // Bound the push along its original direction inside the existing canvas.
-            if (dx) push = Math.min(push,Math.max(0,(dx > 0 ? canvasSize-radius-px : radius-px)/dx));
-            if (dy) push = Math.min(push,Math.max(0,(dy > 0 ? canvasSize-radius-py : radius-py)/dy));
-          }
-          push *= pointerBlend;
-          const nextX = dx*push+offsetX[index]*retainedWeight;
-          const nextY = dy*push+offsetY[index]*retainedWeight;
-          // Dots just outside the moving pocket also need time to settle.
-          const displaced = Math.abs(nextX)+Math.abs(nextY) >= .1;
-          offsetX[index] = displaced ? nextX : 0;
-          offsetY[index] = displaced ? nextY : 0;
-          hasOffsets ||= displaced;
-        }
-        if (displayWeight && (offsetX[index] || offsetY[index])) {
-          px += Math.max(Math.min(0,radius-px),Math.min(Math.max(0,canvasSize-radius-px),offsetX[index]*displayWeight));
-          py += Math.max(Math.min(0,radius-py),Math.min(Math.max(0,canvasSize-radius-py),offsetY[index]*displayWeight));
-        }
+        displaced.x = projectedX[index]; displaced.y = projectedY[index];
+        if (pose.strength) deformProjected(displaced.x,displaced.y,pose,displaced);
+        if (wobbling) wobbleProjected(displaced.x,displaced.y,pose,displaced);
+        const px = view.x+displaced.x*view.scale, py = view.y+displaced.y*view.scale;
         context.moveTo(px+radius,py); context.arc(px,py,radius,0,Math.PI*2);
       }
       context.fill();
     }
-    if (livePointer) offsetWeight = Number(hasOffsets);
   }
-  function resetPointer() {
+  function clearDroplet() {
+    droplet.x = droplet.y = droplet.lagX = droplet.lagY = droplet.strength = droplet.lagStrength = 0;
+    releaseProgress = 0;
+    pose.strength = 0;
+  }
+  function resetMotion() {
     pointerId = null;
     pointerReady = false;
-    offsetWeight = 0;
-    releaseAt = null;
+    pressure.strength = 0;
+    clearDroplet();
+    resetWobble(pointerWobble);
+    resetWobble(scrollWobble);
+    lastScrollY = window.scrollY;
+    returnKick = 0;
   }
-  function updatePointer(now, resting, progress, targetProgress, x, y, extent) {
+  function updatePointer(elapsed, resting, progress, targetProgress, x, y, scale) {
     pointerReady = resting;
-    if (progress === 0 && targetProgress === 0 && !resting) {
-      resetPointer();
-      return false;
+    const wasPressed = pressure.strength > .045;
+    pressure.strength = 0;
+    if (resting && scale > 0 && pointerId !== null && pointerY >= headerEdge) {
+      dropletTarget(pointerX-x,pointerY-y,scale,sphereExtent,pressure);
     }
-    const live = resting && pointerId !== null && pointerY >= headerEdge
-      && Math.abs(pointerX-x) < extent+pocketRadius && Math.abs(pointerY-y) < extent+pocketRadius;
-    if (live) {
-      releaseAt = null;
-    } else if (offsetWeight) {
-      if (releaseAt === null) releaseAt = now;
-      // Fade the displayed offsets over time or as the orb enters the morph.
-      // Keep the fade moving in one direction even when scrolling reverses.
-      offsetWeight = Math.min(offsetWeight,1-ease(Math.max(progress/.18,(now-releaseAt)/releaseDuration)));
+    if (resting && wasPressed && pressure.strength <= .045 && pose.strength > .025) {
+      const rebound = pose.strength*.78;
+      kickWobble(pointerWobble,pose.x*pose.side*rebound,(pose.y*pose.side+1-pose.side)*rebound);
     }
     if (!resting) pointerId = null;
-    return live;
+    // A reversal during the release cannot bring a previous squeeze back.
+    releaseProgress = pressure.strength ? 0 : Math.max(releaseProgress,progress);
+    if (progress >= DROPLET_HANDOFF || (!resting && progress === 0 && targetProgress === 0)) clearDroplet();
+    else stepDroplet(droplet,pressure,elapsed);
+    dropletPose(droplet,releaseProgress,sphereExtent,pose);
+  }
+  function abandonGPU() {
+    gpu?.dispose();
+    gpu = undefined;
+    gpuActive = false;
+    gpuCanvas.hidden = true;
+    stage.dataset.fieldGpu = 'unavailable';
+  }
+  async function prepareGPU() {
+    gpuAttempted = true;
+    const wasLost = () => { abandonGPU(); queue(); };
+    let gl;
+    try {
+      gl = gpuCanvas.getContext('webgl2',{
+        alpha:true, antialias:false, depth:false, stencil:false,
+        failIfMajorPerformanceCaveat:true, powerPreference:'low-power',
+      });
+      if (gl) {
+        const debug = gl.getExtension('WEBGL_debug_renderer_info');
+        const driver = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+        if (/swiftshader|llvmpipe|softpipe|software rasterizer|microsoft basic render/i.test(driver)) {
+          gl.getExtension('WEBGL_lose_context')?.loseContext();
+          gl = null;
+        }
+      }
+      if (!gl) { abandonGPU(); return; }
+      stage.dataset.fieldGpu = 'loading';
+      const { createWebGLField } = await import('./field-webgl.mjs');
+      if (gl.isContextLost()) { abandonGPU(); return; }
+      gpu = createWebGLField(gpuCanvas,gl,sphere,name,wasLost);
+      queue();
+    } catch {
+      if (gl && !gl.isContextLost()) gl.getExtension('WEBGL_lose_context')?.loseContext();
+      abandonGPU();
+    }
+  }
+  function drawField(left, top, resting) {
+    const transform = `translate(${left}px,${top}px)`;
+    if (gpu && (gpuActive || resting)) {
+      try {
+        const wasActive = gpuActive;
+        gpuCanvas.style.transform = transform;
+        gpuActive = gpu.draw(view,pose);
+        if (gpuActive) {
+          if (!wasActive) canvas.width = canvas.height = 1;
+          gpuCanvas.style.opacity = String(view.opacity);
+          stage.dataset.fieldGpu = 'active';
+          return;
+        }
+      } catch { /* Canvas can draw this same scene immediately. */ }
+      abandonGPU();
+    }
+    canvas.style.transform = transform;
+    fit(canvas,context,canvasSize,canvasSize);
+    paintField();
   }
   function measure() {
     const rect = art.getBoundingClientRect();
@@ -172,8 +221,10 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
     targetX = target.left+target.width/2; targetY = target.top+target.height/2;
     targetScale = target.width/2.9;
     pixelRatio = Math.min(devicePixelRatio || 1,2);
-    canvasSize = Math.ceil(2*projectedRadius*Math.max(artSize*0.345,targetScale)+6);
-    canvas.style.width = `${canvasSize}px`; canvas.style.height = `${canvasSize}px`;
+    canvasSize = Math.ceil(2*projectedRadius*Math.max(sourceScale,targetScale)+6);
+    for (const surface of [canvas,gpuCanvas]) {
+      surface.style.width = `${canvasSize}px`; surface.style.height = `${canvasSize}px`;
+    }
     fit(mini,miniContext,target.width,target.height);
     paint(miniContext,projectSurface(name,0,0),target.width/2,target.height/2,target.width/2.9,0.45);
     measureNeeded = false;
@@ -185,38 +236,45 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   }
   function staticFallback() {
     cancelIdle(true);
-    resetPointer();
-    canvas.hidden = true; mini.hidden = true;
+    resetMotion();
+    canvas.hidden = true; gpuCanvas.hidden = true; mini.hidden = true;
+    stage.dataset.fieldRenderer = 'static';
     delete stage.dataset.fieldReady;
     stage.dataset.fieldState = 'static'; stage.dataset.fieldProgress = '0'; stage.dataset.fieldSettled = 'true';
     stage.dataset.fieldIdle = 'false';
     header.style.setProperty('--dock-opacity','0');
+    header.removeAttribute('data-field-overlap');
     docked = false; initialized = false;
   }
   function render(now = performance.now()) {
     frame = 0;
     const frameStarted = performance.now();
-    if (document.hidden) { cancelIdle(true); resetPointer(); return; }
+    if (document.hidden) { cancelIdle(true); resetMotion(); return; }
     if (reducedMotion.matches) { staticFallback(); return; }
     try {
       const layoutChanged = measureNeeded;
       if (measureNeeded) measure();
-      const targetProgress = clamp((window.scrollY-start)/(end-start));
-      const shouldSnap = snapScrollY !== null && snapScrollY === window.scrollY;
+      const scrollY = window.scrollY;
+      const targetProgress = clamp((scrollY-start)/(end-start));
+      const shouldSnap = snapScrollY !== null && snapScrollY === scrollY;
+      const scrollDelta = initialized && !shouldSnap ? scrollY-lastScrollY : 0;
+      lastScrollY = scrollY;
       const elapsed = now-lastFrameTime;
       snapScrollY = null;
       if (!initialized || shouldSnap) {
         visualProgress = targetProgress;
         initialized = true;
       } else {
-        const scrollElapsed = Math.max(1,Math.min(32,elapsed));
+        // Give a hard scroll one frame of inertia before the collapse accelerates.
+        const leavingSphere = visualProgress === 0 && targetProgress > 0 && (targetProgress > .35 || pose.strength > 0);
+        const scrollElapsed = Math.max(1,Math.min(leavingSphere ? 5 : 32,elapsed));
         visualProgress += (targetProgress-visualProgress)*(1-Math.exp(-scrollElapsed/65));
         if (Math.abs(targetProgress-visualProgress) < 0.0001) visualProgress = targetProgress;
       }
       lastFrameTime = now;
       const progress = visualProgress;
       if (docked && progress === 1 && !layoutChanged) return;
-      const originY = artY-Math.min(window.scrollY,start);
+      const originY = artY-Math.min(scrollY,start);
       const extent = sphereExtent*artSize*0.345+3;
       const visibleHeight = Math.min(window.innerHeight,originY+extent)-Math.max(headerEdge,originY-extent);
       const resting = progress === 0 && targetProgress === 0 && visibleHeight > Math.min(48,extent*.4);
@@ -232,35 +290,59 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
       const pitch = (INITIAL_PITCH+Math.sin(idleTime*.00023)*.025)*(1-morph);
       const x = artX+(targetX-artX)*travel+Math.sin(idleTime*.00019)*1.5*idleWeight;
       const y = originY+(targetY-originY)*travel+Math.sin(idleTime*.00031)*2.5*idleWeight;
-      // Crossfade as the moving mark reaches the opaque header, at any size.
+      // Crossfade into the stationary mark as the moving field reaches the header.
       const handoff = ease((headerEdge+24-y)/36);
-      const livePointer = updatePointer(now,resting && handoff < 1,progress,targetProgress,x,y,extent);
       const sourceScale = artSize*0.345;
       const scale = sourceScale+(targetScale-sourceScale)*travel;
       const radiusScale = Math.max(0.6,artSize/900)*(1-travel)+0.45*travel;
+      const scrollKick = sourceScale > 0 ? Math.max(-.155,Math.min(.155,-scrollDelta/(sourceScale*1.7))) : 0;
+      if (handoff < 1 && (resting || progress > 0) && progress < WOBBLE_END) {
+        stepWobble(pointerWobble,elapsed);
+        stepWobble(scrollWobble,elapsed);
+        const kick = scrollKick || returnKick;
+        if (kick) kickWobble(scrollWobble,0,kick);
+        returnKick = 0;
+      } else {
+        resetWobble(pointerWobble);
+        resetWobble(scrollWobble);
+        // A fast trip back to the top arrives before the letters have opened.
+        // Save its momentum for the first visible sphere frames.
+        if (targetProgress >= WOBBLE_END) returnKick = 0;
+        else if (progress >= WOBBLE_END && scrollKick) returnKick = scrollKick;
+      }
+      updatePointer(elapsed,resting && handoff < 1,progress,targetProgress,x,y,sourceScale);
+      wobblePose(pointerWobble,scrollWobble,progress,pose);
       if (handoff < 1) {
-        project(morph,yaw,pitch);
-        // Align the smaller surface to device pixels, preserving dot sharpness.
+        // Align the bounded surface to device pixels.
         const left = Math.floor((x-canvasSize/2)*pixelRatio)/pixelRatio;
         const top = Math.floor((y-canvasSize/2)*pixelRatio)/pixelRatio;
-        canvas.style.transform = `translate(${left}px,${top}px)`;
-        fit(canvas,context,canvasSize,canvasSize);
-        const pointerBlend = livePointer ? 1-Math.exp(-Math.max(1,elapsed)/42) : 0;
-        paintField(x-left,y-top,scale,radiusScale,1-handoff,livePointer,pointerX-left,pointerY-top,pointerBlend);
+        Object.assign(view,{x:x-left,y:y-top,size:canvasSize,pixelRatio,yaw,pitch,morph,scale,radiusScale,opacity:1-handoff});
+        drawField(left,top,resting);
       }
-      const settled = progress === targetProgress && (resting || offsetWeight === 0);
+      const scrollMoving = scrollWobble.y !== 0 || scrollWobble.vy !== 0;
+      const bounceMoving = pointerWobble.x || pointerWobble.y || pointerWobble.vx || pointerWobble.vy;
+      const settled = progress === targetProgress && !scrollMoving && (resting || (!pose.strength && !bounceMoving));
       header.style.setProperty('--dock-opacity',String(handoff));
-      canvas.hidden = handoff === 1; mini.hidden = false;
+      header.toggleAttribute('data-field-overlap',handoff < 1);
+      canvas.hidden = handoff === 1 || gpuActive;
+      gpuCanvas.hidden = handoff === 1 || !gpuActive;
+      mini.hidden = false;
+      stage.dataset.fieldRenderer = gpuActive ? 'webgl2' : 'canvas';
+      // The first visible Canvas paint gets its own frame before probing hardware.
+      if (!gpuAttempted && idleActive && stage.dataset.fieldReady === 'true') void prepareGPU();
       stage.dataset.fieldReady = 'true'; stage.dataset.fieldProgress = progress.toFixed(5);
       stage.dataset.fieldSettled = String(settled);
       stage.dataset.fieldIdle = String(idleActive);
       stage.dataset.fieldState = progress === 0 ? 'sphere' : progress === 1 ? 'docked' : 'morph';
       docked = progress === 1;
-      if (!settled) queue();
+      if (idleActive) idleCost = idleCost*.8+(performance.now()-frameStarted)*.2;
+      // Use the display cadence while a hardware-rendered squeeze has visible motion.
+      const dropletMoving = idleActive && gpuActive && idleCost < 2
+        && (bounceMoving || Math.abs(droplet.strength-pressure.strength)+Math.abs(droplet.lagStrength-pressure.strength) > .001
+          || (pressure.strength > 0 && Math.hypot(droplet.x-pressure.x,droplet.y-pressure.y) > .001));
+      if (!settled || dropletMoving) queue();
       else if (resting) {
-        // Scroll frames stay unthrottled. Idle painting has one pending timer,
-        // at most 24fps, backing off on slower devices to limit main-thread work.
-        if (idleActive) idleCost = idleCost*.8+(performance.now()-frameStarted)*.2;
+        // Idle painting has one timer, capped at 24fps with an adaptive backoff.
         const delay = Math.max(1000/24,Math.min(160,idleCost*8),120-(performance.now()-lastScrollAt));
         idleTimer = window.setTimeout(()=>{ idleTimer = 0; queue(); },delay);
       } else cancelIdle(true);
@@ -273,8 +355,8 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
     if (!frame && !document.hidden) frame = requestAnimationFrame(render);
   }
   // Move outside transformed artwork ancestors so viewport coordinates stay exact.
-  canvas.classList.add('scroll-field');
-  document.body.append(canvas);
+  for (const surface of [canvas,gpuCanvas]) surface.classList.add('scroll-field');
+  document.body.append(canvas,gpuCanvas);
   // Pointer input only replaces the latest sample. The idle timer owns its paints.
   window.addEventListener('pointermove',event=>{
     if (!pointerReady || !finePointer.matches || !event.isPrimary
@@ -290,19 +372,19 @@ if (canvas && mini && stage && art && hero && foot && workHeading && header && d
   },{passive:true});
   window.addEventListener('blur',()=>{ pointerId = null; });
   window.addEventListener('scroll',()=>{ lastScrollAt = performance.now(); cancelIdle(true); queue(); },{passive:true});
-  const viewportChanged = () => { resetPointer(); queue(true,true); };
+  const viewportChanged = () => { resetMotion(); queue(true,true); };
   window.addEventListener('resize',viewportChanged,{passive:true});
-  window.addEventListener('pagehide',resetPointer);
-  window.addEventListener('pageshow',event=>{ resetPointer(); queue(true,event.persisted); });
+  window.addEventListener('pagehide',resetMotion);
+  window.addEventListener('pageshow',event=>{ resetMotion(); queue(true,event.persisted); });
   window.visualViewport?.addEventListener('resize',viewportChanged,{passive:true});
-  const motionChanged = () => { resetPointer(); queue(true); };
+  const motionChanged = () => { resetMotion(); queue(true); };
   if (typeof reducedMotion.addEventListener === 'function') reducedMotion.addEventListener('change',motionChanged);
   else if (typeof reducedMotion.addListener === 'function') reducedMotion.addListener(motionChanged);
   const pointerChanged = () => { pointerId = null; };
   if (typeof finePointer.addEventListener === 'function') finePointer.addEventListener('change',pointerChanged);
   else if (typeof finePointer.addListener === 'function') finePointer.addListener(pointerChanged);
   document.addEventListener('visibilitychange',()=>{
-    resetPointer();
+    resetMotion();
     if (document.hidden) { cancelAnimationFrame(frame); frame=0; cancelIdle(true); }
     else queue(true,true);
   });

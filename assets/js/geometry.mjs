@@ -61,3 +61,208 @@ export function projectSurface(points, yaw, pitch) {
     return {x: x * perspective, y: y * perspective, depth, perspective};
   });
 }
+
+export const DROPLET_PRESSURE = 0.25;
+export const DROPLET_HANDOFF = 0.18;
+export const WOBBLE_END = .58;
+const WOBBLE_FADE_START = .22;
+const CONTACT_RADIUS = .41, CONTACT_SPREAD = .58, CONTACT_CORE = .105, CONTACT_CURVE = .7;
+const SIDE_SPREAD = .22, SIDE_CORE_REDUCTION = .035, OUTWARD_RESTRAINT = .35;
+const DENT_WIDTH = .72, DENT_FALLOFF = .68, CENTER_COMPRESSION = .225;
+const WOBBLE_RATE = .018, WOBBLE_DECAY = .0066, WOBBLE_LIMIT = .17;
+const WOBBLE_BEND = .42;
+export const clampUnit = value => Math.max(0,Math.min(1,value));
+export const smoothUnit = value => { const t = clampUnit(value); return t*t*(3-2*t); };
+
+// Measure pointer distance in projected orb units.
+export function dropletTarget(dx, dy, scale, extent, target) {
+  const distance = Math.hypot(dx,dy)/(scale*extent);
+  target.strength = DROPLET_PRESSURE*(1-smoothUnit((distance-.91)/.39));
+  if (target.strength) {
+    target.x = dx/scale;
+    target.y = dy/scale;
+  }
+}
+
+export function createDroplet() {
+  return { x:0, y:0, lagX:0, lagY:0, strength:0, lagStrength:0 };
+}
+
+// Two relaxation stages soften changes in direction and leave inertia on exit.
+// This exact update keeps the response stable when the frame cadence changes.
+export function stepDroplet(state, target, elapsed) {
+  const time = Math.max(0,Math.min(100,elapsed))/55;
+  const decay = Math.exp(-time);
+  if (target.strength) {
+    if (!state.strength && !state.lagStrength) {
+      state.x = state.lagX = target.x;
+      state.y = state.lagY = target.y;
+    } else {
+      const errorX = state.lagX-target.x, errorY = state.lagY-target.y;
+      state.x = target.x+(state.x-target.x+errorX*time)*decay;
+      state.y = target.y+(state.y-target.y+errorY*time)*decay;
+      state.lagX = target.x+errorX*decay;
+      state.lagY = target.y+errorY*decay;
+    }
+  } else {
+    state.lagX = state.x+(state.lagX-state.x)*decay;
+    state.lagY = state.y+(state.lagY-state.y)*decay;
+  }
+  const errorStrength = state.lagStrength-target.strength;
+  state.strength = target.strength+(state.strength-target.strength+errorStrength*time)*decay;
+  state.lagStrength = target.strength+errorStrength*decay;
+  if (!target.strength && state.strength+state.lagStrength < .0005) {
+    state.x = state.y = state.lagX = state.lagY = state.strength = state.lagStrength = 0;
+  }
+}
+
+export function dropletPose(state, progress, extent, pose) {
+  const distance = Math.hypot(state.x,state.y);
+  pose.x = distance ? state.x/distance : 0;
+  pose.y = distance ? state.y/distance : 0;
+  pose.contactX = state.x;
+  pose.contactY = state.y;
+  const flowX = state.lagX-state.x, flowY = state.lagY-state.y;
+  const flowScale = Math.max(extent*.16,Math.hypot(flowX,flowY));
+  pose.flowX = flowX/flowScale;
+  pose.flowY = flowY/flowScale;
+  pose.side = smoothUnit(distance/(extent*.58));
+  pose.strength = state.strength*(1-smoothUnit(progress/DROPLET_HANDOFF));
+  pose.extent = extent;
+}
+
+export function createWobble() {
+  return { x:0,y:0,vx:0,vy:0 };
+}
+
+export function resetWobble(wobble) {
+  wobble.x = wobble.y = wobble.vx = wobble.vy = 0;
+}
+
+export function kickWobble(wobble, x, y) {
+  wobble.x += x*.06;
+  wobble.y += y*.06;
+  wobble.vx = wobble.vx*.6+x*.024;
+  wobble.vy = wobble.vy*.6+y*.024;
+}
+
+// Evaluate the damped spring directly so its rhythm is independent of frame rate.
+export function stepWobble(wobble, elapsed) {
+  if (!wobble.x && !wobble.y && !wobble.vx && !wobble.vy) return;
+  const time = Math.max(0,elapsed);
+  const decay = Math.exp(-WOBBLE_DECAY*time);
+  const cos = Math.cos(WOBBLE_RATE*time), sin = Math.sin(WOBBLE_RATE*time);
+  const x = wobble.x, y = wobble.y;
+  const mx = (wobble.vx+WOBBLE_DECAY*x)/WOBBLE_RATE;
+  const my = (wobble.vy+WOBBLE_DECAY*y)/WOBBLE_RATE;
+  wobble.x = decay*(x*cos+mx*sin);
+  wobble.y = decay*(y*cos+my*sin);
+  wobble.vx = decay*(wobble.vx*cos-(WOBBLE_RATE*x+WOBBLE_DECAY*mx)*sin);
+  wobble.vy = decay*(wobble.vy*cos-(WOBBLE_RATE*y+WOBBLE_DECAY*my)*sin);
+  if (Math.hypot(wobble.x,wobble.y,wobble.vx/WOBBLE_RATE,wobble.vy/WOBBLE_RATE) < .0013) resetWobble(wobble);
+}
+
+export function wobblePose(pointer, scroll, progress, pose) {
+  const x = pointer.x+scroll.x, y = pointer.y+scroll.y;
+  const magnitude = Math.hypot(x,y);
+  const fade = 1-smoothUnit((progress-WOBBLE_FADE_START)/(WOBBLE_END-WOBBLE_FADE_START));
+  const strength = Math.min(WOBBLE_LIMIT,magnitude)*fade;
+  pose.wobbleAxisX = magnitude ? x/magnitude : 0;
+  pose.wobbleAxisY = magnitude ? y/magnitude : 0;
+  pose.wobbleX = pose.wobbleAxisX*strength;
+  pose.wobbleY = pose.wobbleAxisY*strength;
+  pose.wobbleBend = WOBBLE_BEND*strength/pose.extent;
+}
+
+export function wobbleProjected(x, y, pose, out) {
+  if (!pose.wobbleX && !pose.wobbleY) {
+    out.x = x;
+    out.y = y;
+    return;
+  }
+  const ux = pose.wobbleAxisX, uy = pose.wobbleAxisY;
+  const axial = x*ux+y*uy;
+  const along = Math.max(-1,Math.min(1,axial/pose.extent));
+  // The outer contour leads and the middle follows, bending the shape as it rebounds.
+  const travel = .38+.54*along*along+.14*along;
+  const bend = pose.wobbleBend*along;
+  out.x = x+pose.wobbleX*travel-(x-ux*axial)*bend;
+  out.y = y+pose.wobbleY*travel-(y-uy*axial)*bend;
+}
+
+// Round the dent across the facing surface, then steer displaced dots around the contact.
+export function deformProjected(x, y, pose, out) {
+  let px = x, py = y;
+  if (pose.strength) {
+    const facing = clampUnit((x*pose.x+y*pose.y)/pose.extent);
+    const across = (y-pose.contactY)*pose.x-(x-pose.contactX)*pose.y;
+    const profile = 1-DENT_FALLOFF*smoothUnit(Math.abs(across)/(pose.extent*DENT_WIDTH));
+    const dent = pose.strength*pose.side*facing*facing*profile;
+    const compression = 1-CENTER_COMPRESSION*pose.strength*(1-pose.side)/pose.extent;
+    px = (px-pose.x*dent)*compression;
+    py = (py-pose.y*dent)*compression;
+    const dx = px-pose.contactX, dy = py-pose.contactY;
+    const radius = pose.extent*CONTACT_RADIUS;
+    const distanceSquared = dx*dx+dy*dy;
+    if (distanceSquared < radius*radius) {
+      const distance = Math.sqrt(distanceSquared);
+      const core = pose.extent*(CONTACT_CORE-SIDE_CORE_REDUCTION*pose.side);
+      const softened = Math.sqrt(distanceSquared+core*core);
+      const turn = CONTACT_CURVE*(dx*pose.flowY-dy*pose.flowX)/softened;
+      const slideX = dx-dy*turn, slideY = dy+dx*turn;
+      const outward = Math.max(0,slideX*pose.x+slideY*pose.y)*pose.side*OUTWARD_RESTRAINT;
+      const spread = pose.strength*(CONTACT_SPREAD+SIDE_SPREAD*pose.side)*(1-smoothUnit(distance/radius))/softened;
+      px += (slideX-pose.x*outward)*spread;
+      py += (slideY-pose.y*outward)*spread;
+      // Keep the parted dots inside the existing silhouette envelope.
+      const lengthSquared = px*px+py*py;
+      if (lengthSquared > pose.extent*pose.extent) {
+        const scale = pose.extent/Math.sqrt(lengthSquared);
+        px *= scale;
+        py *= scale;
+      }
+    }
+  }
+  out.x = px;
+  out.y = py;
+}
+
+// Keep the shader and Canvas coefficients together with the numeric reference.
+export const DROPLET_GLSL = `
+vec2 wobbleProjected(vec2 point, vec2 wobble, float extent) {
+  float magnitude = length(wobble);
+  if (magnitude == 0.0) return point;
+  vec2 axis = wobble/magnitude;
+  float axial = dot(point,axis);
+  float along = clamp(axial/extent,-1.0,1.0);
+  float travel = .38+.54*along*along+.14*along;
+  float bend = ${WOBBLE_BEND}*magnitude*along/extent;
+  return point+wobble*travel-(point-axis*axial)*bend;
+}
+
+vec2 deformProjected(vec2 point, vec2 direction, float strength, float extent, vec3 pressure, vec2 flow) {
+  if (strength == 0.0) return point;
+  float facing = clamp(dot(point,direction)/extent,0.0,1.0);
+  vec2 sideways = vec2(-direction.y,direction.x);
+  float across = abs(dot(point-pressure.xy,sideways));
+  float profile = 1.0-${DENT_FALLOFF}*smoothstep(0.0,extent*${DENT_WIDTH},across);
+  float compression = 1.0-${CENTER_COMPRESSION}*strength*(1.0-pressure.z)/extent;
+  point = (point-direction*(strength*pressure.z*facing*facing*profile))*compression;
+  vec2 delta = point-pressure.xy;
+  float radius = extent*${CONTACT_RADIUS};
+  float distanceSquared = dot(delta,delta);
+  if (distanceSquared < radius*radius) {
+    float distanceToContact = sqrt(distanceSquared);
+    float core = extent*(${CONTACT_CORE}-${SIDE_CORE_REDUCTION}*pressure.z);
+    float softened = sqrt(distanceSquared+core*core);
+    float turn = ${CONTACT_CURVE}*(delta.x*flow.y-delta.y*flow.x)/softened;
+    vec2 slide = delta+vec2(-delta.y,delta.x)*turn;
+    float outward = max(0.0,dot(slide,direction))*pressure.z*${OUTWARD_RESTRAINT};
+    float spread = strength*(${CONTACT_SPREAD}+${SIDE_SPREAD}*pressure.z)*(1.0-smoothstep(0.0,radius,distanceToContact))/softened;
+    point += (slide-direction*outward)*spread;
+    float lengthSquared = dot(point,point);
+    if (lengthSquared > extent*extent) point *= extent*inversesqrt(lengthSquared);
+  }
+  return point;
+}
+`;
