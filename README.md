@@ -29,7 +29,7 @@ To profile the orb, leave the preview server running and use a second terminal:
 node scripts/profile-orb.mjs http://127.0.0.1:4173 /tmp/orb-timing.json
 ```
 
-This optional Chromium benchmark warms both scroll directions, then reports visible-morph callback durations, frame spacing, and canvas pixel count at normal and fourfold CPU throttling. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an installed Chromium binary. Compare builds on the same idle machine; these local results do not measure real-user Core Web Vitals.
+This optional Chromium benchmark warms a pointer sweep and both scroll directions, then reports callback and frame timings, canvas pixel count, driver, and JavaScript payload size at normal and fourfold CPU throttling. Set `ORB_PROFILE_RENDERER=canvas` to force the fallback or `ORB_PROFILE_RENDERER=webgl2` to require the hardware renderer. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an installed Chromium binary. Compare builds on the same idle machine. The report covers local main-thread work and animation-frame cadence.
 
 When comparing versions with different handoff timing, sample the same active geometry phase. `ORB_PROFILE_MAX_PROGRESS=.55 ORB_PROFILE_PASS_MS=1800` limits samples to the first 55% of the morph and uses slower scroll passes. The report includes both settings. Hidden large-canvas frames are excluded.
 

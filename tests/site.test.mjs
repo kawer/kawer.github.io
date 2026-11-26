@@ -58,12 +58,23 @@ test('every internal href and resource resolves, including fragments', async () 
   }
 });
 
-test('styles and the animation entry use content versions to avoid stale cached assets', async () => {
-  const version = async path => createHash('sha256').update(await readFile(path)).digest('hex').slice(0,12);
-  const css = `/assets/css/site.css?v=${await version('assets/css/site.css')}`;
-  for (const file of htmlFiles) assert.ok((await readFile(file,'utf8')).includes(`href="${css}"`));
+test('emitted styles, homepage entry and lazy Three.js module use content versions', async () => {
+  const version = bytes => createHash('sha256').update(bytes).digest('hex').slice(0,12);
+  const css = `/assets/css/site.css?v=${version(await readFile(join(root,'assets/css/site.css')))}`;
+  for (const file of htmlFiles) {
+    const html = await readFile(file,'utf8');
+    assert.ok(html.includes(`href="${css}"`));
+    if (file !== join(root,'index.html')) assert.doesNotMatch(html,/<script\b|field-webgl\.mjs/);
+  }
   const home = await readFile(join(root,'index.html'),'utf8');
-  assert.ok(home.includes(`src="/assets/js/field.js?v=${await version('assets/js/field.js')}"`));
+  const entry = await readFile(join(root,'assets/js/field.js'),'utf8');
+  assert.ok(home.includes(`src="/assets/js/field.js?v=${version(entry)}"`));
+  assert.doesNotMatch(home,/field-webgl\.mjs|modulepreload/);
+  const deferred = await readFile(join(root,'assets/js/field-webgl.mjs'),'utf8');
+  const imports = [...entry.matchAll(/import\("([^"]+)"\)/g)].map(match=>match[1]);
+  assert.deepEqual(imports,[`./field-webgl.mjs?v=${version(deferred)}`]);
+  assert.doesNotMatch(deferred,/(?:from\s*|import\s*\()["'](?:https?:|three["'])/);
+  assert.match(deferred,/MIT License/);
 });
 
 test('unpublished content and repository internals cannot enter deployment', async () => {
