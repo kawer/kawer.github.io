@@ -8,7 +8,10 @@ uniform vec4 viewport;
 uniform vec4 droplet;
 uniform vec3 pressure;
 uniform vec2 flow;
-uniform vec2 wobble;
+uniform vec4 pointerWave;
+uniform vec4 pointerWaveTail;
+uniform vec4 scrollWave;
+uniform vec4 scrollWaveTail;
 uniform vec3 shape;
 uniform float pointScale;
 varying float alpha;
@@ -22,7 +25,8 @@ void main() {
   float depth = point.y*rotation.w+z*rotation.z;
   vec2 projected = vec2(x,y)*(3.8/(3.8-depth));
   projected = deformProjected(projected,droplet.xy,droplet.z,droplet.w,pressure,flow);
-  projected = wobbleProjected(projected,wobble,droplet.w);
+  projected = waveProjected(projected,pointerWave,pointerWaveTail,droplet.w);
+  projected = waveProjected(projected,scrollWave,scrollWaveTail,droplet.w);
   vec2 pixel = viewport.xy+projected*shape.y;
   gl_Position = vec4(pixel/viewport.zw*vec2(2.0,-2.0)+vec2(-1.0,1.0),0.0,1.0);
   float band = clamp(floor((depth+1.12)/2.25*8.0),0.0,7.0);
@@ -51,7 +55,10 @@ export function createWebGLField(canvas, gl, sphere, name, onLost) {
     droplet: { value:new Vector4() },
     pressure: { value:new Vector3() },
     flow: { value:new Vector2() },
-    wobble: { value:new Vector2() },
+    pointerWave: { value:new Vector4() },
+    pointerWaveTail: { value:new Vector4() },
+    scrollWave: { value:new Vector4() },
+    scrollWaveTail: { value:new Vector4() },
     shape: { value:new Vector3() },
     pointScale: { value:1 },
   };
@@ -75,6 +82,10 @@ export function createWebGLField(canvas, gl, sphere, name, onLost) {
     material.dispose();
     renderer?.dispose();
     if (!gl.isContextLost()) gl.getExtension('WEBGL_lose_context')?.loseContext();
+  }
+  function setWave(front, tail, wave) {
+    front.set(wave.x,wave.y,wave.middleX,wave.middleY);
+    tail.set(wave.tailX,wave.tailY,wave.axisX,wave.axisY);
   }
   try {
     renderer = new WebGLRenderer({ canvas, context:gl });
@@ -103,7 +114,8 @@ export function createWebGLField(canvas, gl, sphere, name, onLost) {
         uniforms.droplet.value.set(pose.x,pose.y,pose.strength,pose.extent);
         uniforms.pressure.value.set(pose.contactX,pose.contactY,pose.side);
         uniforms.flow.value.set(pose.flowX,pose.flowY);
-        uniforms.wobble.value.set(pose.wobbleX,pose.wobbleY);
+        setWave(uniforms.pointerWave.value,uniforms.pointerWaveTail.value,pose.pointerWave);
+        setWave(uniforms.scrollWave.value,uniforms.scrollWaveTail.value,pose.scrollWave);
         uniforms.pointScale.value = pixels/view.size;
         renderer.render(scene,camera);
         if (shaderFailed || gl.isContextLost()) return false;

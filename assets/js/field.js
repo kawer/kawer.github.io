@@ -2,7 +2,7 @@ import {
   createSurface, createNameSurface, projectSurface, INITIAL_YAW, INITIAL_PITCH,
   DROPLET_HANDOFF, WOBBLE_END, clampUnit as clamp, smoothUnit as ease,
   createDroplet, dropletTarget, stepDroplet, dropletPose, deformProjected,
-  createWobble, resetWobble, kickWobble, stepWobble, wobblePose, wobbleProjected,
+  createWobble, resetWobble, kickWobble, stepWobble, wobbleIsActive, createWavePose, wobblePose, waveProjected,
 } from './geometry.mjs';
 
 const canvas = /** @type {HTMLCanvasElement | null} */ (document.querySelector('#field-canvas'));
@@ -34,7 +34,7 @@ if (canvas && gpuCanvas && mini && stage && art && hero && foot && workHeading &
   const droplet = createDroplet(), pressure = {x:0,y:0,strength:0};
   const pointerWobble = createWobble(), scrollWobble = createWobble();
   const pose = {x:0,y:0,contactX:0,contactY:0,flowX:0,flowY:0,side:0,strength:0,extent:sphereExtent,
-    wobbleX:0,wobbleY:0,wobbleAxisX:0,wobbleAxisY:0,wobbleBend:0};
+    pointerWave:createWavePose(),scrollWave:createWavePose()};
   const displaced = {x:0,y:0};
   const view = {x:0,y:0,size:1,pixelRatio:1,yaw:0,pitch:0,morph:0,scale:1,radiusScale:1,opacity:1};
   let gpu, gpuActive = false, gpuAttempted = false;
@@ -91,7 +91,7 @@ if (canvas && gpuCanvas && mini && stage && art && hero && foot && workHeading &
   }
   function paintField() {
     project(view.morph,view.yaw,view.pitch);
-    const wobbling = pose.wobbleX || pose.wobbleY;
+    const pointerWave = wobbleIsActive(pose.pointerWave), scrollWave = wobbleIsActive(pose.scrollWave);
     for (let band=0;band<8;band++) {
       context.fillStyle = `rgba(35,92,219,${(0.14+band*0.115)*view.opacity})`;
       context.beginPath();
@@ -99,7 +99,8 @@ if (canvas && gpuCanvas && mini && stage && art && hero && foot && workHeading &
       for (let index=first[band];index!==-1;index=next[index]) {
         displaced.x = projectedX[index]; displaced.y = projectedY[index];
         if (pose.strength) deformProjected(displaced.x,displaced.y,pose,displaced);
-        if (wobbling) wobbleProjected(displaced.x,displaced.y,pose,displaced);
+        if (pointerWave) waveProjected(displaced.x,displaced.y,pose.pointerWave,pose.extent,displaced);
+        if (scrollWave) waveProjected(displaced.x,displaced.y,pose.scrollWave,pose.extent,displaced);
         const px = view.x+displaced.x*view.scale, py = view.y+displaced.y*view.scale;
         context.moveTo(px+radius,py); context.arc(px,py,radius,0,Math.PI*2);
       }
@@ -300,7 +301,7 @@ if (canvas && gpuCanvas && mini && stage && art && hero && foot && workHeading &
         stepWobble(pointerWobble,elapsed);
         stepWobble(scrollWobble,elapsed);
         const kick = scrollKick || returnKick;
-        if (kick) kickWobble(scrollWobble,0,kick);
+        if (kick) kickWobble(scrollWobble,0,kick,0,-1);
         returnKick = 0;
       } else {
         resetWobble(pointerWobble);
@@ -319,8 +320,8 @@ if (canvas && gpuCanvas && mini && stage && art && hero && foot && workHeading &
         Object.assign(view,{x:x-left,y:y-top,size:canvasSize,pixelRatio,yaw,pitch,morph,scale,radiusScale,opacity:1-handoff});
         drawField(left,top,resting);
       }
-      const scrollMoving = scrollWobble.y !== 0 || scrollWobble.vy !== 0;
-      const bounceMoving = pointerWobble.x || pointerWobble.y || pointerWobble.vx || pointerWobble.vy;
+      const scrollMoving = wobbleIsActive(scrollWobble);
+      const bounceMoving = wobbleIsActive(pointerWobble);
       const settled = progress === targetProgress && !scrollMoving && (resting || (!pose.strength && !bounceMoving));
       header.style.setProperty('--dock-opacity',String(handoff));
       header.toggleAttribute('data-field-overlap',handoff < 1);
